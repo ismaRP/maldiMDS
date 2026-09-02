@@ -10,8 +10,8 @@
 #' * provide a `Spectra` object directly in `sps_mzr`.
 #' If data is provided using more than one of the options, the `sps_mzr` is used, and then the `mzml_files`.
 #' If metadata is provided, only the spectra specified in it will be used, even if `indir` contains more files
-#' 
-#' 
+#'
+#'
 #' In order to split spectra by taxa to be analysed with different peptides:
 #' * taxon_factor can be a factor specifying the split. The order must match that of the input data.
 #'   Then use taxon_column to specify the column of the `peptides_user` that contains the taxon.
@@ -128,6 +128,7 @@
 #' @importFrom fs dir_ls
 #' @importFrom dplyr mutate
 #' @importFrom BiocParallel MulticoreParam SerialParam SnowParam register bpmapply
+#' @export
 preprocess_spectra = function(
   indir=NULL,
   metadata=NULL,
@@ -223,10 +224,10 @@ preprocess_spectra = function(
   levels(taxon_factor) = sort(levels(taxon_factor))
   levels(peptide_factor) = sort(levels(peptide_factor))
 
-  if (any(levels(taxon_factor) != levels(peptide_factor))) {    
+  if (any(levels(taxon_factor) != levels(peptide_factor))) {
     taxf_levels = paste0(levels(taxon_factor), collapse = '\n  -')
     taxf_levels = paste0('  -', taxf_levels)
-  
+
     pepf_levels = paste0(levels(peptide_factor), collapse = '\n  -')
     pepf_levels = paste0('  -', pepf_levels)
 
@@ -270,7 +271,7 @@ preprocess_spectra = function(
     parparam = MulticoreParam(workers=ncores, progressbar = verbose)
     print_progress(sprintf('\nUsing %s cores in MulticoreParam\n', ncores), verbose)
   }
-  
+
   if (!make_plot) {
     prep_by_group = function(sps_mzr_gr, peptides_gr, taxon) {
       print_progress(sprintf('\n\n______________\nProcessing %s\n', taxon), verbose)
@@ -300,9 +301,9 @@ preprocess_spectra = function(
 
 
 #' Internal preprocessing function
-#' 
+#'
 #' Preprocess a Spectra object with MsBackendMzR
-#' 
+#'
 #' @importFrom MALDIzooMS smooth baseline_correction peak_detection
 #' @importFrom MALDIzooMS peptide_pseudo_clusters peaks_local_bg
 #' @importFrom parallel detectCores
@@ -329,9 +330,9 @@ preprocess_spectra = function(
     min_isopeaks = 4,
     norm_func = NULL){
 
-  
+
   mono_masses = pep_table$mass
-  
+
   register(parparam)
 
   processingChunkSize(sps_mzr) = chunk_size
@@ -345,7 +346,7 @@ preprocess_spectra = function(
     sps_mzr, MALDIzooMS::smooth, method = 'SavitzkyGolay',
     hws = smooth_sg_hws, int_index = 'intensity', in_place = FALSE)
 
-  
+
   # Baseline estimation on MA smoothed
   sps_mzr = addProcessing(
     sps_mzr, MALDIzooMS::baseline_correction, int_index = 'intensity_WeightedMovingAverage',
@@ -386,9 +387,9 @@ preprocess_spectra = function(
 
 
 #' Preprocessing function for plotting
-#' 
+#'
 #' Preprocess a Spectra object so that it can be plotted
-#' 
+#'
 #' @param q2e `numeric`.
 #' A theoretical isotopic invelope with this `q2e` is overlaid in the plot in blue.
 #' @param peptide_labeller `function`.
@@ -431,7 +432,7 @@ preprocess_spectra = function(
   sps_mzr = addProcessing(
     sps_mzr, MALDIzooMS::smooth, method = 'SavitzkyGolay',
     hws = smooth_sg_hws, int_index = 'intensity', in_place = FALSE)
-  
+
   # Baseline estimation on MA smoothed
   sps_mzr = addProcessing(
     sps_mzr, MALDIzooMS::baseline_correction, int_index = 'intensity_WeightedMovingAverage',
@@ -459,7 +460,7 @@ preprocess_spectra = function(
     sps_mzr, peptide_pseudo_clusters,
     mono_masses = mono_masses, n_isopeaks = n_isopeaks, min_isopeaks = min_isopeaks,
     tolerance = tolerance, ppm = ppm)
-  
+
   peaks = peaksData(sps_mzr, BPPARAM=param)
   names(peaks) = sps_mzr$spectrumId
 
@@ -467,7 +468,7 @@ preprocess_spectra = function(
   peaks = prepare_peaks(
     peaks, peptides_user = peptides_user, n_isopeaks = n_isopeaks,
     int_column = int_col, norm_func=norm_func, q2e=q2e)
-  
+
   .make_plot(
     sps_mzr, peaks, pep_table, n_isopeaks, norm_func = norm_func,
     peptide_labeller = peptide_labeller)
