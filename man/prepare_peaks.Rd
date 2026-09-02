@@ -7,7 +7,7 @@
 prepare_peaks(
   peaks,
   n_isopeaks,
-  peptides_user = NULL,
+  peptides_user,
   int_column = "intensity",
   norm_func = NULL,
   q2e = NULL

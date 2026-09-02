@@ -2,7 +2,7 @@
 % Please edit documentation in R/preprocess_data.R
 \name{plot_n_peaks_per_peptide}
 \alias{plot_n_peaks_per_peptide}
-\title{Title}
+\title{Plotting the number of isotopic peaks detected}
 \usage{
 plot_n_peaks_per_peptide(peaks, n_isopeaks, min_isopeaks, marker_order, ...)
 }
@@ -10,5 +10,5 @@ plot_n_peaks_per_peptide(peaks, n_isopeaks, min_isopeaks, marker_order, ...)
 \item{marker_order}{}
 }
 \description{
-Title
+Plotting the number of isotopic peaks detected
 }

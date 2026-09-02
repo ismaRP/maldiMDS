@@ -2,13 +2,15 @@
 % Please edit documentation in R/preprocess_data.R
 \name{normalize_intensity}
 \alias{normalize_intensity}
-\title{Normalize vector of intensities by the maximum}
+\title{Normalize vector of intensities to the highest}
 \usage{
 normalize_intensity(intensity, norm_func)
 }
 \arguments{
 \item{intensity}{Vector of intensities}
+
+\item{norm_func}{Normalising function. Takes a vector of intensities as input.}
 }
 \description{
-Normalize vector of intensities by the maximum
+Normalize vector of intensities to the highest
 }

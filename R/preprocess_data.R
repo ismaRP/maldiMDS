@@ -1,75 +1,308 @@
-
-#' Preprocessing spectra for q2e estimation
-#'
+#' @title Preprocessing spectra for q2e estimation
+#' @description
 #' Performs smoothening, baseline removal and peak detection on MALDI samples.
 #' From the peaks, isotopic peaks for a list of peptides are extracted.
 #'
+#' @details
+#' Provide the input data either:
+#' * `indir` path to spectra in mzML format
+#' * provide a list of paths to `mzml_files`
+#' * provide a `Spectra` object directly in `sps_mzr`.
+#' If data is provided using more than one of the options, the `sps_mzr` is used, and then the `mzml_files`.
+#' If metadata is provided, only the spectra specified in it will be used, even if `indir` contains more files
+#' 
+#' 
+#' In order to split spectra by taxa to be analysed with different peptides:
+#' * taxon_factor can be a factor specifying the split. The order must match that of the input data.
+#'   Then use taxon_column to specify the column of the `peptides_user` that contains the taxon.
+#' * If only `taxon_column` is specified, it must be a column in both metadata containing the taxonomic ID
+#'   and in the `peptides_user` dataframe.
+#'
 #' @param indir Folder containing spectra in mzML format.
-#' @param metadata Data frame with spectra metadata with at least \code{file}
-#' column. Ideally metadata has been cleaned before with [MALDIzooMS::clean_metadata]
+#' @param metadata Data frame with spectra metadata.
+#' It contains the following columns:
+#'  * `sample_name`
+#'  * `replicate`
+#'  *  Optionally, a column specifying taxonomic identification, as specified by `taxon_column`
+#' Any spectra not present in `metadata` is not further analysed. Conversely, the function checks all the entries in `metadata`
+#' have a corresponding file or spectrum.
 #' @param mzml_files Paths to mzML files
 #' @param spectrum_file_name If mzml_files are provided, whether to use file names
 #' as spectra names. Otherwise, it is assumed the the spectra IDs are in the mzML
 #' files' headers.
 #' @param sps_mzr Spectra object
-#' @param mono_masses
-#' Array with the peptides monoisotopics masses
-#' @param smooth_wma_hws
-#' Half-window size for WeightedMovingAverage smoothing method
-#' @param smooth_sg_hws
-#' Half-window size for SavitzkyGolay smoothing method
-#' @param iterations
-#' Iterations parameter for baseline detection.
-#' @param halfWindowSize
-#' Half-window size parameter for local maximum detection.
-#' @param snr
-#' Signal-to-noise threshold above which peaks are considered
-#' @param k
-#' k parameter for [MsCoreUtils::refineCentroids()]
-#' @param threshold
-#' threshold parameter for [MsCoreUtils::refineCentroids()]
-#' @param local_bg
-#' Whether to further to clean peaks of lists by modelling the local
-#' background noise. See [MALDIzooMS::peaks_local_bg].
-#' Ideally should work with a \code{snr} threshold of 0.
-#' \code{mass_range}, \code{bg_cutoff} and \code{l_cutoff} only applied if \code{local_bg} is TRUE
-#' @param mass_range
-#' Mass window to both sides of a peak to be considered for backgroun modelling
-#' @param bg_cutoff
-#' The peaks within the mass range with intensity below the \code{bg_cutoff} quantile
-#' are considered for background modelling. \code{bg_cutoff=1} keeps all peaks
-#' and \code{bg_cutoff=0.5} would only keep the bottom half.
-#' @param l_cutoff
-#' Likelihood threshold or p-value. Peaks with a probability of being modelled as
-#' background noise higher than this are filtered out.
-#' @param n_isopeaks
-#' Number of isotopic peaks to pick. Default is 5 and the maximum permitted.
-#' @param min_isopeaks
-#' If less than min_isopeaks consecutive (about 1 Da difference) isotopic peaks
-#' are detected, the whole isotopic envelope is discarded. Default is 4
-#' @param q2e
-#' If provided, it adds the theoretical isotopic distribution of peptides with
-#' this extent of deamidation
-#' @param norm_func
-#' Function to normalize the isotopic distribution
-#' @param tolerance
-#' Mass tolerance in Da between \code{mono_masses} and subsequent isotopic peaks
-#' and detected peaks. See [MsCoreUtils::closest]
-#' @param ppm
-#' Parts-per-million added to tolerance. See [MsCoreUtils::closest]
-#' @param ncores
-#' Number of cores used by the [Spectra::MsBackendMzR] backend in [Spectra::peaksData]
-#' @param chunk_size
+#' @param peptides_user DataFrame with peptides to be used to calculate glutamine q2e deamidation on.
+#'        It must contain the following columns:
+#'        * `mass` with peptide M+H monoisotopic masses
+#'        * `sequence`
+#'        * `n_hyp` number of hydroxyprolines
+#'        * `pep_number` a peptide number or ID, which can be the same across taxa. Eg. pep1, pep2, ...
+#'        * `pep_name` optional. Additional peptide name, this could be the ZooMS marker name
+#'        * `taxon_column` optional. If For markers, taxa that this peptide marker belongs to, if the preprocessing
+#'                         is split by taxa.
+#' The default peptides are the ones from Nair et al. (2022).
+#' The paper contains the details on the preprocessing procedure.
+#' @param make_plot logical, whether to make a plot of the preprocessing step. Default is `FALSE`.
+#'        If set to `TRUE` the input spectral data cannot contain more than 10 spectra. If you need to
+#'        plot more spectra, call the function multiple times.
+#' @param taxon_factor Factor to split spectra by taxon if a different set of peptides is
+#'        to be used for each.
+#' @param taxon_column Column in `metadata` and `peptides_user` with the taxonomic ID used
+#'        for splitting the analysis.
+#' @param verbose Whether to output progress
+#' @param spectrumId_in_file logical. If spectra is given as one spectrum per mzML file and spectrumId is
+#'        the file name, instead of being in the ID label of the mzML file. This is discouraged.
+#' @param nreplicates integer, default NULL. Number of replicates per sample. If set, only samples with
+#'                    `nreplicates` are analysed
+#' @param ncores `integer`.
+#' Number of cores used by the [Spectra::MsBackendMzR()] backend in [Spectra::peaksData()]
+#' Default is `NULL`, in which case it uses `detectCores() - 2` with [BiocParallel::MulticoreParam()].
+#' If set to 1, it uses [BiocParallel::SerialParam()].
+#' @param chunk_size `integer`.
+#' Processing chunk size i.e. how many spectra are loaded and processed in a chunk.
+#' Keep in mind there will be \code{ncores} chunks processed in parallel.
+#' Default is 40L.
+#' @param ... MALDI-TOF Preprocessing and/or plotting parameters (see below).
+#'    * `smooth_wma_hws` `integer`.
+#'    Half-window size for WeightedMovingAverage smoothing method. Default 4.
+#'    * `smooth_sg_hws` `integer`.
+#'    Half-window size for SavitzkyGolay smoothing method. Default 6.
+#'    * `iterations` `integer`.
+#'    Iterations parameter for baseline detection using SNIP algorithm (see [MsCoreUtils::estimateBaseline()]). Default 50.
+#'    * `halfWindowSize` `integer`.
+#'    Half-window size parameter for local maximum detection. Default 20.
+#'    * `snr` `numeric`.
+#'    Signal-to-noise threshold above which peaks are considered.
+#'    Only used for the SuperSmoother or MAD noise estimates.
+#'    For local background estimation, see params `local_bg`, `mass_range` and `bg_cutoff` and `l_cutoff`.
+#'    Default 2.
+#'    * `k` `integer`.
+#'    `k` parameter for [MsCoreUtils::refineCentroids()] Default is 0L, i.e. do not perform centroid refinement.
+#'    * `threshold` `numeric`.
+#'    threshold parameter for [MsCoreUtils::refineCentroids()] Default is 0.33, meaning only intensities above 0.33*maximal peak intenity are used.
+#'    * `local_bg` `logical`.
+#'    Whether to further to clean peaks of lists by modelling the local background.
+#'    Default `FALSE`.
+#'    See [MALDIzooMS::peaks_local_bg()].
+#'    Ideally should work with a \code{snr} threshold of 0L.
+#'    * `mass_range` `numeric`.
+#'    Mass window to both sides of a peak to be considered for local background modelling
+#'    Default 100.
+#'    * `bg_cutoff` `numeric`.
+#'    The peaks within the mass range with intensity below the \code{bg_cutoff} quantile
+#'    are considered for background modelling. \code{bg_cutoff=1} keeps all peaks
+#'    and \code{bg_cutoff=0.5} would only keep the bottom half. Default 0.5.
+#'    * `l_cutoff` `numeric`.
+#'    Likelihood threshold or p-value. Peaks with a probability of being modelled as
+#'    background noise higher than this are filtered out.
+#'    Default 1e-8.
+#'    * `tolerance` `numeric`.
+#'    Mass tolerance in Da between \code{mono_masses} with subsequent isotopic peaks
+#'    and detected peaks. See [MsCoreUtils::closest()]
+#'    Default 0.4.
+#'    * `ppm` `numeric`.
+#'    Parts-per-million added to tolerance. See [MsCoreUtils::closest()].
+#'    Default 50.
+#'    * `n_isopeaks` `integer`.
+#'    Number of isotopic peaks to pick. Default is 5 and the maximum permitted.
+#'    Default 5L.
+#'    * `min_isopeaks` `integer`.
+#'    If less than min_isopeaks consecutive (about 1 Da difference) isotopic peaks
+#'    are detected, the whole isotopic envelope is discarded.
+#'    Default 4L.
+#'    * `norm_func` `function` or `NULL` (default).
+#'    Function to normalize the isotopic distribution.
+#'    If `NULL` (default), the isotopic peaks are normalised to the highest one.
+#'    * `q2e` `numeric`. Only for plotting.
+#'    A theoretical isotopic invelope with this `q2e` is overlaid in the plot in blue.
+#'    * `peptide_labeller` `function`. Only for plotting.
+#'    A function used to transform the facet labels. See [ggplot2::facet_wrap()] and [ggplot2::labeller()]
 #' @return A list of dataframes, 1 per sample. Each dataframe has 3 columns,
 #' m/z, intensity and signal-to-noise ratio for each of the n_isopeaks from each
 #' peptide. Missing peaks are NAs.
-#' @details
-#' Provide the input data either using `metadata` and `indir`, or provide paths
-#' with `mzml_files`. You can also provide a `Spectra` object directly in `sps_mzr`.
-#' If data is provided using more than one of the options, the `sps_mzr` is used, and then the `mzml_files`.
-#'
-#'
-#' @importFrom MALDIzooMS get_spectra_name clean_metadata separate_sample_replicate
+#' @references
+#' Nair, B. et al. (2022) ‘Parchment Glutamine Index (PQI):
+#' A novel method to estimate glutamine deamidation levels in parchment collagen obtained from low-quality MALDI-TOF data’,
+#' bioRxiv. doi:10.1101/2022.03.13.483627.
+#' @importFrom MALDIzooMS get_spectra_name match_metadata_spectra separate_sample_replicate
+#' @importFrom fs dir_ls
+#' @importFrom dplyr mutate
+#' @importFrom BiocParallel MulticoreParam SerialParam SnowParam register bpmapply
+preprocess_spectra = function(
+  indir=NULL,
+  metadata=NULL,
+  mzml_files=NULL,
+  spectrum_file_name=NULL,
+  sps_mzr=NULL,
+  peptides_user=NULL,
+  make_plot = FALSE,
+  taxon_factor=NULL,
+  taxon_column=NULL,
+  verbose=FALSE,
+  spectrumId_in_file=FALSE,
+  nreplicates = NULL,
+  ncores = NULL, chunk_size=40,
+  ...) {
+
+  # This function is the preprocessing interface
+
+  if (all(is.null(indir), is.null(mzml_files), is.null(sps_mzr))){
+    stop('Please provide data either as a Spectra object in sps_mzr, ',
+         'a directory with mzML files in indir, ',
+         'or a character vector with path(s) to mzML files in mzml_files')
+  }
+
+  if (is.null(sps_mzr)) {
+    print_progress('Reading mzML headers into Spectra', verbose)
+    if (is.null(mzml_files) & !is.null(indir)){
+      mzml_files = dir_ls(indir)
+    }
+    sps_mzr = Spectra(mzml_files, source = MsBackendMzR(), centroided = FALSE)
+    if (length(sps_mzr) == length(mzml_files) & spectrumId_in_file) {
+      # Remove extension and use filename as spectrumId
+      spectrum_id = path_ext_remove(path_file(sps_mzr$dataOrigin))
+      sps_mzr$spectrumId = spectrum_id
+    }
+  }
+
+  if (!is.null(metadata)) {
+    nrows_metadata_old = nrow(metadata)
+    nspectra_old = length(sps_mzr)
+    tmp = match_metadata_spectra(metadata, sps_mzr)
+    metadata = tmp[['metadata']]
+    sps_mzr = tmp[['sps_mzr']]
+    nrows_metadata_new = nrow(metadata)
+    nspectra_new = length(sps_mzr)
+    # TODO: if verbose write report on how many missing
+    if (verbose) {
+      md_loss = nrows_metadata_old - nrows_metadata_new
+      sp_loss = nspectra_old - nspectra_new
+      if (md_loss > 0 | sp_loss > 0){
+        message(
+          "\nThere are metadata entries without spectrum or spectra without metadata:\n",
+          sprintf("Metadata entries without spectra: %d\n", md_loss),
+          sprintf("Spectra without metadata entry: %d\n", sp_loss)
+        )
+      }
+    }
+  } else {
+    metadata = separate_sample_replicate(sps_mzr$spectrumId)
+    metadata$spectrum_id = sps_mzr$spectrumId
+  }
+  metadata = metadata %>% group_by(sample_name) %>%
+    mutate(n_replicates = n()) %>% ungroup()
+
+  if (is.wholenumber(nreplicates)) {
+    keep = metadata$n_replicates >= nreplicates
+    metadata = metadata[keep,]
+    sps_mzr = sps_mzr[keep]
+  }
+  if (is.null(peptides_user)) {
+    peptides_user = peptides
+  }
+
+  if (!is.null(taxon_column) & is.null(taxon_factor)) {
+    if (is.null(metadata)) {
+      stop(
+        'Cannot split preprocessing by taxon.\n',
+        sprintf('Please provide a metadata table with taxon_column %s', taxon_column))
+    }
+    taxon_factor = factor(metadata[[taxon_column]])
+    peptide_factor = factor(peptides_user[[taxon_column]])
+  } else if (!is.null(taxon_column) & !is.null(taxon_factor)) {
+    taxon_factor = factor(taxon_factor)
+    taxon_factor = droplevels(taxon_factor)
+    peptide_factor = factor(peptides_user[[taxon_column]])
+  } else {
+    # Create a fake factor that won't split
+    taxon_factor = factor(rep.int('unique_group', length(sps_mzr)))
+    peptide_factor = factor(rep.int('unique_group', length(peptides_user)))
+  }
+
+  # Make sure levels of taxon_factor and peptide_factor match
+  levels(taxon_factor) = sort(levels(taxon_factor))
+  levels(peptide_factor) = sort(levels(peptide_factor))
+
+  if (any(levels(taxon_factor) != levels(peptide_factor))) {    
+    taxf_levels = paste0(levels(taxon_factor), collapse = '\n  -')
+    taxf_levels = paste0('  -', taxf_levels)
+  
+    pepf_levels = paste0(levels(peptide_factor), collapse = '\n  -')
+    pepf_levels = paste0('  -', pepf_levels)
+
+    stop(
+      'Levels of taxa for splitting peptides and spectral data ',
+      'do not match\nor are in different order.\n',
+      sprintf('Data levels:\n%s\nPeptide levels:\n%s\n', taxf_levels, pepf_levels)
+    )
+  }
+
+  if (verbose) {
+    if (length(levels(taxon_factor)) > 1) {
+      levels_split = paste0(levels(taxon_factor), collapse = '\n  -')
+      cat(
+        sprintf('\nSplitting preprocessing by taxa:\n  -%s', levels_split)
+      )
+    } else {
+      cat('Spectra not split by taxa.\n')
+    }
+  }
+
+  if (make_plot) {
+    print_progress('Setting ncores to 1 and processing in a single chunk.', verbose)
+    ncores = 1
+    chunk_size = length(sps_mzr)
+  }
+
+  if (is.null(ncores)) {
+    ncores = detectCores() - 2
+  } else if (ncores < 1) {
+    ncores = detectCores() - 2
+  }
+
+  if (ncores == 1) {
+    parparam = SerialParam(progressbar = verbose)
+    print_progress('\nUsing 1 core in SerialParam', verbose)
+  } else if (.Platform$OS.type == "windows") {
+    parparam = SnowParam(workers=ncores, progressbar = verbose)
+    print_progress(sprintf('\nUsing %s cores in SnowParam\n', ncores), verbose)
+  } else {
+    parparam = MulticoreParam(workers=ncores, progressbar = verbose)
+    print_progress(sprintf('\nUsing %s cores in MulticoreParam\n', ncores), verbose)
+  }
+  
+  if (!make_plot) {
+    prep_by_group = function(sps_mzr_gr, peptides_gr, taxon) {
+      print_progress(sprintf('\n\n______________\nProcessing %s\n', taxon), verbose)
+      ## TODO: proprocessing function call
+      peaks = .preprocess_spectra(sps_mzr = sps_mzr_gr, pep_table = peptides_gr,
+        verbose = verbose, parparam=parparam, chunk_size=chunk_size, ...)
+      print_progress('Done', verbose)
+
+      peaks = peaks %>% mutate(taxon = taxon)
+
+      return(peaks)
+    }
+    peaks_alltaxa = bpmapply(
+      prep_by_group,
+      split(sps_mzr, taxon_factor),
+      split(peptides_user, peptide_factor),
+      as.list(levels(taxon_factor)),
+      SIMPLIFY = F,
+      BPPARAM = SerialParam(progressbar = FALSE)
+    )
+    peaks_alltaxa = do.call(rbind, peaks_alltaxa)
+  } else {
+    .preprocessing_plot(sps_mzr = sps_mzr, pep_table = peptides_user, ...)
+  }
+
+}
+
+
+#' Internal preprocessing function
+#' 
+#' Preprocess a Spectra object with MsBackendMzR
+#' 
 #' @importFrom MALDIzooMS smooth baseline_correction peak_detection
 #' @importFrom MALDIzooMS peptide_pseudo_clusters peaks_local_bg
 #' @importFrom parallel detectCores
@@ -78,18 +311,101 @@
 #' @importFrom Spectra MsBackendMzR processingChunkSize
 #' @importFrom BiocParallel MulticoreParam SerialParam SnowParam register
 #' @importFrom dplyr rename bind_cols
-#' @export
-#' @details The default peptides are the ones from Nair et al. (2022).
-#' The paper contains the details on the preprocessing procedure.
-#' @references
-#' Nair, B. et al. (2022) ‘Parchment Glutamine Index (PQI): A novel method to estimate glutamine deamidation levels in parchment collagen obtained from low-quality MALDI-TOF data’, bioRxiv. doi:10.1101/2022.03.13.483627.
-#'
-preprocess_spectra = function(
-    indir=NULL, metadata=NULL,
-    mzml_files=NULL, spectrum_name_file=FALSE,
-    sps_mzr=NULL,
-    make_plots = FALSE,
-    peptides_user = NULL,
+.preprocess_spectra = function(
+    sps_mzr,
+    pep_table,
+    verbose,
+    parparam,
+    chunk_size,
+    smooth_wma_hws = 4L,
+    smooth_sg_hws = 6L,
+    iterations = 50L,
+    halfWindowSize = 20L,
+    snr = 2, k = 0L, threshold = 0.33,
+    local_bg = FALSE,
+    mass_range=100, bg_cutoff=0.5, l_cutoff=1e-8,
+    tolerance = 0.4, ppm=50,
+    n_isopeaks = 5,
+    min_isopeaks = 4,
+    norm_func = NULL){
+
+  
+  mono_masses = pep_table$mass
+  
+  register(parparam)
+
+  processingChunkSize(sps_mzr) = chunk_size
+
+  # Weighted Moving Average Smoothing
+  sps_mzr = addProcessing(
+    sps_mzr, MALDIzooMS::smooth, method = 'WeightedMovingAverage',
+    hws = smooth_wma_hws, int_index = 'intensity', in_place = FALSE)
+  # Savitzky-Golay Filter smoothing
+  sps_mzr = addProcessing(
+    sps_mzr, MALDIzooMS::smooth, method = 'SavitzkyGolay',
+    hws = smooth_sg_hws, int_index = 'intensity', in_place = FALSE)
+
+  
+  # Baseline estimation on MA smoothed
+  sps_mzr = addProcessing(
+    sps_mzr, MALDIzooMS::baseline_correction, int_index = 'intensity_WeightedMovingAverage',
+    keep_bl = FALSE, substract_index = 'intensity_SavitzkyGolay', in_place = TRUE,
+    method = 'SNIP', iterations = iterations, decreasing = TRUE)
+  # PEAKS
+  sps_mzr = addProcessing(
+    sps_mzr, MALDIzooMS::peak_detection, halfWindowSize = halfWindowSize,
+    method = 'SuperSmoother', snr = snr, k = k, threshold = threshold,
+    descending = TRUE, int_index = 'intensity_SavitzkyGolay',
+    add_snr=TRUE)
+
+  if (local_bg) {
+    sps_mzr = addProcessing(
+      sps_mzr, peaks_local_bg, mass_range = mass_range, bg_cutoff = bg_cutoff,
+      l_cutoff = l_cutoff, int_index = 'intensity_SavitzkyGolay')
+  }
+
+  # GET ISOTOPIC CLUSTERS
+  sps_mzr = addProcessing(
+    sps_mzr, peptide_pseudo_clusters,
+    mono_masses = mono_masses, n_isopeaks = n_isopeaks, min_isopeaks = min_isopeaks,
+    tolerance = tolerance, ppm = ppm)
+
+
+  print_progress('\tProcessing spectra ...\n', verbose)
+  peaks = peaksData(sps_mzr, BPPARAM=param)
+  names(peaks) = sps_mzr$spectrumId
+  print_progress('\tPreparing peaks ... ', verbose)
+  int_col = 'intensity_SavitzkyGolay'
+  peaks = prepare_peaks(
+    peaks, peptides_user = pep_table, n_isopeaks = n_isopeaks,
+    int_column = int_col, norm_func=norm_func, q2e=NULL)
+  print_progress('Done\n', verbose)
+  return(peaks)
+
+}
+
+
+#' Preprocessing function for plotting
+#' 
+#' Preprocess a Spectra object so that it can be plotted
+#' 
+#' @param q2e `numeric`.
+#' A theoretical isotopic invelope with this `q2e` is overlaid in the plot in blue.
+#' @param peptide_labeller `function`.
+#' A function used to transform the facet labels. See [ggplot2::facet_wrap()] and [ggplot2::labeller()]
+#' @importFrom MALDIzooMS get_spectra_name separate_sample_replicate
+#' @importFrom MALDIzooMS smooth baseline_correction peak_detection
+#' @importFrom MALDIzooMS peptide_pseudo_clusters peaks_local_bg
+#' @importFrom parallel detectCores
+#' @importFrom magrittr %>%
+#' @importFrom Spectra Spectra addProcessing peaksData
+#' @importFrom Spectra MsBackendMzR processingChunkSize
+#' @importFrom BiocParallel MulticoreParam SerialParam SnowParam register
+#' @importFrom dplyr rename bind_cols
+.preprocessing_plot = function(
+    sps_mzr,
+    pep_table,
+    verbose,
     smooth_wma_hws = 4,
     smooth_sg_hws = 6,
     iterations = 50,
@@ -101,53 +417,11 @@ preprocess_spectra = function(
     n_isopeaks = 5,
     min_isopeaks = 4,
     norm_func = NULL,
-    q2e =  NULL,
-    ncores = NULL, chunk_size=40,
-    verbose = FALSE){
+    q2e = NULL,
+    peptide_labeller = NULL
+  ) {
 
-  if (is.null(peptides_user)) {
-    peptides_user = peptides
-  }
-  mono_masses = peptides_user$mass
-  if (is.null(ncores)) ncores = detectCores() - 2
-
-
-  if (ncores == 1) {
-    param = SerialParam(progressbar = verbose)
-    message('Using 1 core in SerialParam\n')
-  } else if (.Platform$OS.type == "windows") {
-    param = SnowParam(workers=ncores, progressbar = verbose)
-    message(sprintf('Using %s cores in SnowParam\n', ncores))
-  } else {
-    param = MulticoreParam(workers=ncores, progressbar = verbose)
-    message(sprintf('Using %s cores in MulticoreParam\n', ncores))
-  }
-  register(param)
-
-  if (is.null(sps_mzr) & is.null(mzml_files) & !(is.null(metadata) | is.null(indir))){
-    metadata = clean_metadata(metadata, indir)
-    mzml_files = file.path(indir, metadata$file)
-    print_progress('Reading spectra...', verbose)
-    sps_mzr = suppressMessages(
-      Spectra(mzml_files, source = MsBackendMzR(), centroided = FALSE,
-              BPPARAM=param))
-    # Here we pick the spectrum ID from the metadata spectra_name
-    sps_mzr$spectrumId = metadata$spectra_name
-  } else if (is.null(sps_mzr) & !is.null(mzml_files) & (is.null(metadata) | is.null(indir))) {
-    print_progress('Reading spectra...', verbose)
-    sps_mzr = suppressMessages(
-      Spectra(mzml_files, source = MsBackendMzR(), centroided = FALSE,
-              BPPARAM=param))
-    if (spectrum_name_file) {
-      sps_mzr$spectrumId = get_spectra_name(sps_mzr$dataOrigin)
-    }
-  } else if (all(c(is.null(sps_mzr), is.null(mzml_files), (is.null(metadata) | is.null(indir))))){
-    stop('Please provide the metadata with sample_names and indir, ',
-         'mzml_files or a Spectra object in sps_mzr directly.')
-  }
-  processingChunkSize(sps_mzr) = chunk_size
-
-
+  register(SerialParam(progressbar = FALSE))
 
   # Weighted Moving Average Smoothing
   sps_mzr = addProcessing(
@@ -157,82 +431,53 @@ preprocess_spectra = function(
   sps_mzr = addProcessing(
     sps_mzr, MALDIzooMS::smooth, method = 'SavitzkyGolay',
     hws = smooth_sg_hws, int_index = 'intensity', in_place = FALSE)
-
-  if (make_plots) {
-    # Baseline estimation on MA smoothed
+  
+  # Baseline estimation on MA smoothed
+  sps_mzr = addProcessing(
+    sps_mzr, MALDIzooMS::baseline_correction, int_index = 'intensity_WeightedMovingAverage',
+    keep_bl = TRUE, substract_index = 'intensity_SavitzkyGolay', in_place = FALSE,
+    method = 'SNIP', iterations = iterations, decreasing = TRUE)
+  # Get spectra
+  sp = peaksData(sps_mzr)
+  names(sp) = sps_mzr$spectrumId
+  sp = as.data.frame(sp) %>% rename(spectra_name = group_name)
+  sp = bind_cols(sp, separate_sample_replicate(sp$spectra_name, sep = '_'))
+  # PEAKS
+  sps_mzr = addProcessing(
+    sps_mzr, MALDIzooMS::peak_detection, halfWindowSize = halfWindowSize,
+    method = 'SuperSmoother', snr = snr, k = k, threshold = threshold,
+    descending = TRUE, int_index = 'intensity_SavitzkyGolay_bl_corr_SNIP',
+    add_snr=TRUE)
+  if (local_bg) {
     sps_mzr = addProcessing(
-      sps_mzr, MALDIzooMS::baseline_correction, int_index = 'intensity_WeightedMovingAverage',
-      keep_bl = TRUE, substract_index = 'intensity_SavitzkyGolay', in_place = FALSE,
-      method = 'SNIP', iterations = iterations, decreasing = TRUE)
-    # Get spectra
-    sp = peaksData(sps_mzr)
-    names(sp) = sps_mzr$spectrumId
-    sp = as.data.frame(sp) %>% rename(spectra_name = group_name)
-    sp = bind_cols(sp, separate_sample_replicate(sp$spectra_name, sep = '_'))
-    # PEAKS
-    sps_mzr = addProcessing(
-      sps_mzr, MALDIzooMS::peak_detection, halfWindowSize = halfWindowSize,
-      method = 'SuperSmoother', snr = snr, k = k, threshold = threshold,
-      descending = TRUE, int_index = 'intensity_SavitzkyGolay_bl_corr_SNIP',
-      add_snr=TRUE)
-    if (local_bg) {
-      sps_mzr = addProcessing(
-        sps_mzr, peaks_local_bg, mass_range = mass_range, bg_cutoff = bg_cutoff,
-        l_cutoff = l_cutoff, int_index = 'intensity_SavitzkyGolay_bl_corr_SNIP')
-    }
-
-  } else {
-    # Baseline estimation on MA smoothed
-    sps_mzr = addProcessing(
-      sps_mzr, MALDIzooMS::baseline_correction, int_index = 'intensity_WeightedMovingAverage',
-      keep_bl = FALSE, substract_index = 'intensity_SavitzkyGolay', in_place = TRUE,
-      method = 'SNIP', iterations = iterations, decreasing = TRUE)
-    # PEAKS
-    sps_mzr = addProcessing(
-      sps_mzr, MALDIzooMS::peak_detection, halfWindowSize = halfWindowSize,
-      method = 'SuperSmoother', snr = snr, k = k, threshold = threshold,
-      descending = TRUE, int_index = 'intensity_SavitzkyGolay',
-      add_snr=TRUE)
-
-    if (local_bg) {
-      sps_mzr = addProcessing(
-        sps_mzr, peaks_local_bg, mass_range = mass_range, bg_cutoff = bg_cutoff,
-        l_cutoff = l_cutoff, int_index = 'intensity_SavitzkyGolay')
-    }
-
+      sps_mzr, peaks_local_bg, mass_range = mass_range, bg_cutoff = bg_cutoff,
+      l_cutoff = l_cutoff, int_index = 'intensity_SavitzkyGolay_bl_corr_SNIP')
   }
+
   # GET ISOTOPIC CLUSTERS
   sps_mzr = addProcessing(
     sps_mzr, peptide_pseudo_clusters,
     mono_masses = mono_masses, n_isopeaks = n_isopeaks, min_isopeaks = min_isopeaks,
     tolerance = tolerance, ppm = ppm)
-
-
-  print_progress('Processing spectra ... ', verbose)
+  
   peaks = peaksData(sps_mzr, BPPARAM=param)
   names(peaks) = sps_mzr$spectrumId
-  if (make_plots) {
-    int_col = 'intensity_SavitzkyGolay_bl_corr_SNIP'
-  } else {
-    int_col = 'intensity_SavitzkyGolay'
-  }
-  print_progress('Preparing peaks ... ', verbose)
+
+  int_col = 'intensity_SavitzkyGolay_bl_corr_SNIP'
   peaks = prepare_peaks(
     peaks, peptides_user = peptides_user, n_isopeaks = n_isopeaks,
     int_column = int_col, norm_func=norm_func, q2e=q2e)
-  print_progress('Done\n', verbose)
-  if (make_plots) {
-    return(list(sp, peaks))
-  } else {
-    return(peaks)
-  }
-
+  
+  .make_plot(
+    sps_mzr, peaks, pep_table, n_isopeaks, norm_func = norm_func,
+    peptide_labeller = peptide_labeller)
 }
 
-#' Normalize vector of intensities by the maximum
+
+#' Normalize vector of intensities to the highest
 #'
 #' @param intensity Vector of intensities
-#'
+#' @param norm_func Normalising function. Takes a vector of intensities as input.
 #' @return
 #' @export
 #'
@@ -245,6 +490,7 @@ normalize_intensity = function(intensity, norm_func) {
   }
   return(norm_int)
 }
+
 
 #' Prepare list of peaks data into a data.frame
 #'
@@ -269,13 +515,10 @@ normalize_intensity = function(intensity, norm_func) {
 #' @export
 #'
 #' @examples
-prepare_peaks = function(peaks, n_isopeaks, peptides_user=NULL, int_column='intensity',
+prepare_peaks = function(peaks, n_isopeaks, peptides_user, int_column='intensity',
                          norm_func=NULL, q2e=NULL) {
 
 
-  if (is.null(peptides_user)) {
-    peptides_user = peptides
-  }
   if (is.null(norm_func)) norm_func = max
   peaks = as.data.frame(peaks) %>%
     rename(spectra_name = group_name)
@@ -329,7 +572,7 @@ prepare_peaks = function(peaks, n_isopeaks, peptides_user=NULL, int_column='inte
 
   peaks[['intensity_use']] = peaks[[int_column]]
   peaks = peaks %>%
-    arrange(sample, replicate, pep_idx, mass_pos) %>%
+    arrange(sample_name, replicate, pep_idx, mass_pos) %>%
     group_by(spectra_name, pep_idx) %>%
     mutate(norm_int = normalize_intensity(intensity_use, norm_func=norm_func),
            n_peaks = sum(!is.na(intensity_use))) %>%
@@ -365,7 +608,7 @@ calc_n_frac_peaks = function(x, n_isopeaks, min_isopeaks) {
   return(data.frame(fracs))
 }
 
-#' Title
+#' Plotting the number of isotopic peaks detected
 #'
 #' @param peaks
 #' @param n_isopeaks
@@ -421,7 +664,7 @@ plot_n_peaks_per_peptide = function(peaks, n_isopeaks, min_isopeaks, marker_orde
 
 
 
-#' Title
+#' Make a faceted preprocessing plot per spectra and peptide
 #'
 #' @param sp
 #' @param peaks
@@ -432,8 +675,9 @@ plot_n_peaks_per_peptide = function(peaks, n_isopeaks, min_isopeaks, marker_orde
 #' @export
 #'
 #' @examples
-plot_preprocessing = function(sp, peaks, peptides_user, n_isopeaks, norm_func=NULL,
-                              peptide_labeller) {
+.make_plot = function(
+    sp, peaks, peptides_user, n_isopeaks,
+    norm_func=NULL, peptide_labeller) {
 
   if (is.null(norm_func)) norm_func = max
   peaks_mask = list()
