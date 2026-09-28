@@ -223,7 +223,7 @@ lm_q2e = function(norm_int = NULL,
 #' Effectively it will calculate separate coefficient for each spectra and peptide.
 #'
 #' WARNING: this cannot handle too large data.frames.
-#' I will try to add [biglm] at some point.
+#' I will try to add `biglm` at some point.
 #' Otherwise use group_by and the other functions
 #'
 #' @param peaks_df Data.frame with peaks data and theoretical isotopic envelopes

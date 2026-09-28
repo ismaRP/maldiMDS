@@ -9,28 +9,18 @@
 #' * provide a list of paths to `mzml_files`
 #' * provide a `Spectra` object directly in `sps_mzr`.
 #' If data is provided using more than one of the options, the `sps_mzr` is used, and then the `mzml_files`.
-#' If metadata is provided, only the spectra specified in it will be used, even if `indir` contains more files
-#'
 #'
 #' In order to split spectra by taxa to be analysed with different peptides:
-#' * taxon_factor can be a factor specifying the split. The order must match that of the input data.
-#'   Then use taxon_column to specify the column of the `peptides_user` that contains the taxon.
-#' * If only `taxon_column` is specified, it must be a column in both metadata containing the taxonomic ID
-#'   and in the `peptides_user` dataframe.
+#' taxon_factor is a factor specifying the split. The order must match that of the input data.
+#'Then use taxon_column to specify the column of the `peptides_user` that contains the taxon.
 #'
 #' @param indir Folder containing spectra in mzML format.
-#' @param metadata Data frame with spectra metadata.
-#' It contains the following columns:
-#'  * `sample_name`
-#'  * `replicate`
-#'  *  Optionally, a column specifying taxonomic identification, as specified by `taxon_column`
-#' Any spectra not present in `metadata` is not further analysed. Conversely, the function checks all the entries in `metadata`
-#' have a corresponding file or spectrum.
 #' @param mzml_files Paths to mzML files
 #' @param spectrum_file_name If mzml_files are provided, whether to use file names
 #' as spectra names. Otherwise, it is assumed the the spectra IDs are in the mzML
 #' files' headers.
-#' @param sps_mzr Spectra object
+#' @param sps_mzr Spectra object. Alternatively to passing `indir` and/or `mzml_files`,
+#' it is possible to pass a Spectra object directly.
 #' @param peptides_user DataFrame with peptides to be used to calculate glutamine q2e deamidation on.
 #'        It must contain the following columns:
 #'        * `mass` with peptide M+H monoisotopic masses
@@ -47,7 +37,7 @@
 #'        plot more spectra, call the function multiple times.
 #' @param taxon_factor Factor to split spectra by taxon if a different set of peptides is
 #'        to be used for each.
-#' @param taxon_column Column in `metadata` and `peptides_user` with the taxonomic ID used
+#' @param taxon_column Column in `peptides_user` with the taxonomic ID used
 #'        for splitting the analysis.
 #' @param verbose Whether to output progress
 #' @param spectrumId_in_file logical. If spectra is given as one spectrum per mzML file and spectrumId is
@@ -117,21 +107,17 @@
 #'    A theoretical isotopic invelope with this `q2e` is overlaid in the plot in blue.
 #'    * `peptide_labeller` `function`. Only for plotting.
 #'    A function used to transform the facet labels. See [ggplot2::facet_wrap()] and [ggplot2::labeller()]
-#' @return A list of dataframes, 1 per sample. Each dataframe has 3 columns,
-#' m/z, intensity and signal-to-noise ratio for each of the n_isopeaks from each
-#' peptide. Missing peaks are NAs.
+#' @return A dataframes. Missing peaks are NAs.
 #' @references
 #' Nair, B. et al. (2022) ‘Parchment Glutamine Index (PQI):
 #' A novel method to estimate glutamine deamidation levels in parchment collagen obtained from low-quality MALDI-TOF data’,
 #' bioRxiv. doi:10.1101/2022.03.13.483627.
-#' @importFrom MALDIzooMS get_spectra_name match_metadata_spectra separate_sample_replicate
 #' @importFrom fs dir_ls
 #' @importFrom dplyr mutate
 #' @importFrom BiocParallel MulticoreParam SerialParam SnowParam register bpmapply
 #' @export
 preprocess_spectra = function(
   indir=NULL,
-  metadata=NULL,
   mzml_files=NULL,
   spectrum_file_name=NULL,
   sps_mzr=NULL,
@@ -166,59 +152,16 @@ preprocess_spectra = function(
     }
   }
 
-  if (!is.null(metadata)) {
-    nrows_metadata_old = nrow(metadata)
-    nspectra_old = length(sps_mzr)
-    tmp = match_metadata_spectra(metadata, sps_mzr)
-    metadata = tmp[['metadata']]
-    sps_mzr = tmp[['sps_mzr']]
-    nrows_metadata_new = nrow(metadata)
-    nspectra_new = length(sps_mzr)
-    # TODO: if verbose write report on how many missing
-    if (verbose) {
-      md_loss = nrows_metadata_old - nrows_metadata_new
-      sp_loss = nspectra_old - nspectra_new
-      if (md_loss > 0 | sp_loss > 0){
-        message(
-          "\nThere are metadata entries without spectrum or spectra without metadata:\n",
-          sprintf("Metadata entries without spectra: %d\n", md_loss),
-          sprintf("Spectra without metadata entry: %d\n", sp_loss)
-        )
-      }
-    }
-  } else {
-    metadata = separate_sample_replicate(sps_mzr$spectrumId)
-    metadata$spectrum_id = sps_mzr$spectrumId
-  }
-  metadata = metadata %>% group_by(sample_name) %>%
-    mutate(n_replicates = n()) %>% ungroup()
-
-  if (is.wholenumber(nreplicates)) {
-    keep = metadata$n_replicates >= nreplicates
-    metadata = metadata[keep,]
-    sps_mzr = sps_mzr[keep]
-  }
-  if (is.null(peptides_user)) {
-    peptides_user = peptides
-  }
-
-  if (!is.null(taxon_column) & is.null(taxon_factor)) {
-    if (is.null(metadata)) {
-      stop(
-        'Cannot split preprocessing by taxon.\n',
-        sprintf('Please provide a metadata table with taxon_column %s', taxon_column))
-    }
-    taxon_factor = factor(metadata[[taxon_column]])
-    peptide_factor = factor(peptides_user[[taxon_column]])
-  } else if (!is.null(taxon_column) & !is.null(taxon_factor)) {
+  if (!is.null(taxon_column) & !is.null(taxon_factor)) {
     taxon_factor = factor(taxon_factor)
     taxon_factor = droplevels(taxon_factor)
     peptide_factor = factor(peptides_user[[taxon_column]])
   } else {
     # Create a fake factor that won't split
     taxon_factor = factor(rep.int('unique_group', length(sps_mzr)))
-    peptide_factor = factor(rep.int('unique_group', length(peptides_user)))
+    peptide_factor = factor(rep.int('unique_group', nrow(peptides_user)))
   }
+
 
   # Make sure levels of taxon_factor and peptide_factor match
   levels(taxon_factor) = sort(levels(taxon_factor))
@@ -250,7 +193,7 @@ preprocess_spectra = function(
   }
 
   if (make_plot) {
-    print_progress('Setting ncores to 1 and processing in a single chunk.', verbose)
+    print_progress('\nSetting ncores to 1 and processing in a single chunk.', verbose)
     ncores = 1
     chunk_size = length(sps_mzr)
   }
@@ -263,7 +206,7 @@ preprocess_spectra = function(
 
   if (ncores == 1) {
     parparam = SerialParam(progressbar = verbose)
-    print_progress('\nUsing 1 core in SerialParam', verbose)
+    print_progress('\nUsing 1 core in SerialParam\n', verbose)
   } else if (.Platform$OS.type == "windows") {
     parparam = SnowParam(workers=ncores, progressbar = verbose)
     print_progress(sprintf('\nUsing %s cores in SnowParam\n', ncores), verbose)
@@ -278,7 +221,6 @@ preprocess_spectra = function(
       ## TODO: proprocessing function call
       peaks = .preprocess_spectra(sps_mzr = sps_mzr_gr, pep_table = peptides_gr,
         verbose = verbose, parparam=parparam, chunk_size=chunk_size, ...)
-      print_progress('Done', verbose)
 
       peaks = peaks %>% mutate(taxon = taxon)
 
@@ -294,7 +236,32 @@ preprocess_spectra = function(
     )
     peaks_alltaxa = do.call(rbind, peaks_alltaxa)
   } else {
-    .preprocessing_plot(sps_mzr = sps_mzr, pep_table = peptides_user, ...)
+    prep_by_group = function(sps_mzr_gr, peptides_gr, taxon) {
+      print_progress(sprintf('\n______________\nProcessing %s\n', taxon), verbose)
+      ## TODO: proprocessing function call
+      prep_result = .preprocessing_plot(sps_mzr = sps_mzr_gr, pep_table = peptides_gr,
+                                  verbose = verbose, ...)
+
+      prep_result[[1]] = prep_result[[1]] %>% mutate(taxon = taxon)
+      prep_result[[2]] = prep_result[[2]] %>% mutate(taxon = taxon)
+
+      return(prep_result)
+    }
+    results_alltaxa = bpmapply(
+      prep_by_group,
+      split(sps_mzr, taxon_factor),
+      split(peptides_user, peptide_factor),
+      as.list(levels(taxon_factor)),
+      SIMPLIFY = F,
+      BPPARAM = SerialParam(progressbar = FALSE)
+    )
+    sp_alltaxa = do.call(
+      rbind, lapply(results_alltaxa, "[[", 1))
+    peaks_alltaxa = do.call(
+      rbind, lapply(results_alltaxa, "[[", 2))
+
+    print_progress('\n______________\nMaking plot ... \n', verbose)
+    .make_plot(sp_alltaxa, peaks_alltaxa)
   }
 
 }
@@ -311,7 +278,7 @@ preprocess_spectra = function(
 #' @importFrom Spectra Spectra addProcessing peaksData
 #' @importFrom Spectra MsBackendMzR processingChunkSize
 #' @importFrom BiocParallel MulticoreParam SerialParam SnowParam register
-#' @importFrom dplyr rename bind_cols
+#' @importFrom dplyr rename bind_cols left_join bind_rows
 .preprocess_spectra = function(
     sps_mzr,
     pep_table,
@@ -373,9 +340,30 @@ preprocess_spectra = function(
 
 
   print_progress('\tProcessing spectra ...\n', verbose)
-  peaks = peaksData(sps_mzr, BPPARAM=param)
-  names(peaks) = sps_mzr$spectrumId
-  print_progress('\tPreparing peaks ... ', verbose)
+  peaks = peaksData(sps_mzr, BPPARAM=parparam)
+
+  print_progress('Done\n', verbose)
+  md = data.frame(
+    spectrumId = sps_mzr[['spectrumId']],
+    sample_name = sps_mzr[['sample_name']]
+  )
+
+  peaks = do.call(
+    rbind,
+    Map(
+      function(df, sn){
+        df = as.data.frame(df)
+        df$spectrumId = sn
+        df
+      },
+      peaks,
+      sps_mzr$spectrumId
+    )
+  )
+
+  peaks = merge(peaks, md, by='spectrumId', all.x=TRUE, sort=FALSE)
+
+  print_progress('\tPreparing peaks ...\n', verbose)
   int_col = 'intensity_SavitzkyGolay'
   peaks = prepare_peaks(
     peaks, peptides_user = pep_table, n_isopeaks = n_isopeaks,
@@ -402,7 +390,7 @@ preprocess_spectra = function(
 #' @importFrom Spectra Spectra addProcessing peaksData
 #' @importFrom Spectra MsBackendMzR processingChunkSize
 #' @importFrom BiocParallel MulticoreParam SerialParam SnowParam register
-#' @importFrom dplyr rename bind_cols
+#' @importFrom dplyr rename bind_cols filter cur_group
 .preprocessing_plot = function(
     sps_mzr,
     pep_table,
@@ -423,7 +411,7 @@ preprocess_spectra = function(
   ) {
 
   register(SerialParam(progressbar = FALSE))
-
+  mono_masses = pep_table$mass
   # Weighted Moving Average Smoothing
   sps_mzr = addProcessing(
     sps_mzr, MALDIzooMS::smooth, method = 'WeightedMovingAverage',
@@ -439,10 +427,25 @@ preprocess_spectra = function(
     keep_bl = TRUE, substract_index = 'intensity_SavitzkyGolay', in_place = FALSE,
     method = 'SNIP', iterations = iterations, decreasing = TRUE)
   # Get spectra
+  print_progress('\tRetrieveing spectra ...\n', verbose)
   sp = peaksData(sps_mzr)
-  names(sp) = sps_mzr$spectrumId
-  sp = as.data.frame(sp) %>% rename(spectra_name = group_name)
-  sp = bind_cols(sp, separate_sample_replicate(sp$spectra_name, sep = '_'))
+  # names(sp) = sps_mzr$spectrumId
+  # sp = as.data.frame(sp) %>% rename(spectra_name = group_name)
+  # sp = bind_cols(sp, separate_sample_replicate(sp$spectra_name, sep = '_'))
+
+  sp = do.call(
+    rbind,
+    Map(
+      function(df, sn){
+        df = as.data.frame(df)
+        df$spectrumId = sn
+        df
+      },
+      sp,
+      sps_mzr$spectrumId
+    )
+  )
+
   # PEAKS
   sps_mzr = addProcessing(
     sps_mzr, MALDIzooMS::peak_detection, halfWindowSize = halfWindowSize,
@@ -461,17 +464,101 @@ preprocess_spectra = function(
     mono_masses = mono_masses, n_isopeaks = n_isopeaks, min_isopeaks = min_isopeaks,
     tolerance = tolerance, ppm = ppm)
 
+  print_progress('\tRetrieving peaks ...\n', verbose)
   peaks = peaksData(sps_mzr, BPPARAM=param)
   names(peaks) = sps_mzr$spectrumId
 
+  md = data.frame(
+    spectrumId = sps_mzr[['spectrumId']],
+    sample_name = sps_mzr[['sample_name']]
+  )
+
+  peaks = do.call(
+    rbind,
+    Map(
+      function(df, sn){
+        df = as.data.frame(df)
+        df$spectrumId = sn
+        df
+      },
+      peaks,
+      sps_mzr$spectrumId
+    )
+  )
+
+  peaks = merge(peaks, md, by='spectrumId', all.x=TRUE, sort=FALSE)
+  sp = merge(sp, md, by='spectrumId', all.x=TRUE, sort=FALSE)
   int_col = 'intensity_SavitzkyGolay_bl_corr_SNIP'
+  print_progress('\tPreparing peaks ...\n', verbose)
   peaks = prepare_peaks(
-    peaks, peptides_user = peptides_user, n_isopeaks = n_isopeaks,
+    peaks, peptides_user = pep_table, n_isopeaks = n_isopeaks,
     int_column = int_col, norm_func=norm_func, q2e=q2e)
 
-  .make_plot(
-    sps_mzr, peaks, pep_table, n_isopeaks, norm_func = norm_func,
-    peptide_labeller = peptide_labeller)
+  if (is.null(norm_func)) norm_func = max
+  peaks_mask = list()
+  sp_mask = rep(NA, nrow(sp))
+  # Right and left plot margin from monoisotopic m/z
+  left_margin = 2
+  right_margin = 6
+  for (i in seq_along(pep_table$mass)) {
+    mono_mz = pep_table$mass[i]
+    s = (sp$mz > (mono_mz - left_margin)) & (sp$mz < (mono_mz + right_margin))
+    sp_mask[s] = pep_table$pep_number[i]
+    p = (peaks$mz > (mono_mz - left_margin)) & (peaks$mz < (mono_mz + right_margin))
+    peaks_mask[[i]] = p
+  }
+  peaks_mask = Reduce('|', peaks_mask)
+  peaks = peaks[peaks_mask,]
+
+  sp$pep_number = sp_mask
+  sp = sp[!is.na(sp$pep_number),]
+
+  sort_idx = order(pep_table$mass)
+
+
+  normalize_sp_plotting = function(intens_vector, p, gr) {
+    sp_id = gr$spectrumId
+    pn = gr$pep_number
+    p = p %>% dplyr::filter(spectrumId == sp_id, pep_number == pn)
+
+    norm_factor = norm_func(p[[int_col]], na.rm=TRUE)
+    intens_vector = intens_vector/norm_factor
+
+    return(intens_vector)
+  }
+  # sp = tibble(sp)
+  sp = sp %>%
+    group_by(spectrumId, pep_number) %>%
+    mutate(
+      norm_int = normalize_sp_plotting(intensity, peaks, cur_group()),
+      norm_int_wma = normalize_sp_plotting(intensity_WeightedMovingAverage, peaks, cur_group()),
+      norm_int_bl = normalize_sp_plotting(baseline_SNIP, peaks, cur_group()),
+      norm_int_bl_corr = normalize_sp_plotting(intensity_SavitzkyGolay_bl_corr_SNIP, peaks, cur_group())) %>%
+    ungroup()
+
+
+
+  shift_mz = function(mz_vector, pn) {
+    pn = as.character(pn$pep_number[1])
+    mz_can = pep_table %>% dplyr::filter(pep_number == pn) %>% pull(mass)
+    mz_vector = mz_vector - mz_can
+    return(mz_vector)
+  }
+
+  peaks = peaks %>% group_by(pep_number) %>%
+    mutate(
+      mz_0 = shift_mz(mz, cur_group())
+    )
+  sp = sp %>% group_by(pep_number) %>%
+    mutate(
+      mz_0 = shift_mz(mz, cur_group())
+    )
+
+  peaks = peaks %>%
+    mutate(pep_number = factor(pep_number, levels=pep_table$pep_number[sort_idx]))
+  sp = sp %>%
+    mutate(pep_number = factor(pep_number, levels=pep_table$pep_number[sort_idx]))
+  return(list(sp, peaks))
 }
 
 
@@ -491,6 +578,7 @@ normalize_intensity = function(intensity, norm_func) {
   }
   return(norm_int)
 }
+
 
 
 #' Prepare list of peaks data into a data.frame
@@ -521,8 +609,8 @@ prepare_peaks = function(peaks, n_isopeaks, peptides_user, int_column='intensity
 
 
   if (is.null(norm_func)) norm_func = max
-  peaks = as.data.frame(peaks) %>%
-    rename(spectra_name = group_name)
+  # peaks = as.data.frame(peaks) %>%
+  #   rename(spectra_name = group_name)
 
   iso_peps = get_isodists(
     peptides_user$sequence, 2, peptides_user$n_hyp,
@@ -534,7 +622,7 @@ prepare_peaks = function(peaks, n_isopeaks, peptides_user, int_column='intensity
       mutate(theor_deam = deam_iso$deam_comb)
   }
 
-  n_spectra = length(unique(peaks$spectra_name))
+  n_spectra = length(unique(peaks$spectrumId))
   n_peptides = nrow(peptides_user)
   eps = 1e-5
   peaks = peaks %>%
@@ -563,18 +651,14 @@ prepare_peaks = function(peaks, n_isopeaks, peptides_user, int_column='intensity
         times = n_spectra)))
   }
 
-  # peaks = cbind(peaks, separate_sample_replicate(peaks$spectra_name))
-  peaks = bind_cols(
-    peaks, separate_sample_replicate(peaks$spectra_name, sep = '_'))
-
   peaks = Reduce(function(x, y) merge(x, y, all = TRUE, by = c('pep_idx', 'mass_pos')),
                  list(peaks, iso_peps))
 
 
   peaks[['intensity_use']] = peaks[[int_column]]
   peaks = peaks %>%
-    arrange(sample_name, replicate, pep_idx, mass_pos) %>%
-    group_by(spectra_name, pep_idx) %>%
+    arrange(sample_name, pep_idx, mass_pos) %>%
+    group_by(spectrumId, pep_idx) %>%
     mutate(norm_int = normalize_intensity(intensity_use, norm_func=norm_func),
            n_peaks = sum(!is.na(intensity_use))) %>%
     ungroup() %>%
@@ -669,64 +753,34 @@ plot_n_peaks_per_peptide = function(peaks, n_isopeaks, min_isopeaks, marker_orde
 #'
 #' @param sp
 #' @param peaks
-#' @param peptides_user
-#' @param n_isopeaks
+#' @param peptide_labeller
 #'
 #' @return
 #' @export
-#'
+#' @importFrom ggplot2 ggplot
 #' @examples
 .make_plot = function(
-    sp, peaks, peptides_user, n_isopeaks,
-    norm_func=NULL, peptide_labeller) {
+    sp, peaks, peptide_labeller=NULL) {
 
-  if (is.null(norm_func)) norm_func = max
-  peaks_mask = list()
-  sp_mask = rep(NA, nrow(sp))
-  for (i in seq_along(peptides_user$mass)) {
-    mono_mz = peptides_user$mass[i]
-    s = (sp$mz > (mono_mz-3)) & (sp$mz < (mono_mz+6))
-    sp_mask[s] = peptides_user$pep_number[i]
-    p = (peaks$mz > (mono_mz-3)) & (peaks$mz < (mono_mz+6))
-    peaks_mask[[i]] = p
-  }
-  peaks_mask = Reduce('|', peaks_mask)
-  peaks = peaks[peaks_mask,]
-
-  sp$pep_number = sp_mask
-  sp = sp[!is.na(sp$pep_number),]
-
-  sort_idx = order(peptides_user$mass)
-  sp = sp %>%
-    group_by(spectra_name, pep_number) %>%
-    mutate(norm_int = intensity/norm_func(intensity_SavitzkyGolay_bl_corr_SNIP, na.rm = TRUE),
-           norm_int_wma = intensity_WeightedMovingAverage/norm_func(intensity_SavitzkyGolay_bl_corr_SNIP, na.rm = TRUE),
-           norm_int_bl = baseline_SNIP/norm_func(intensity_SavitzkyGolay_bl_corr_SNIP, na.rm = TRUE),
-           norm_int_bl_corr = intensity_SavitzkyGolay_bl_corr_SNIP/norm_func(intensity_SavitzkyGolay_bl_corr_SNIP, na.rm = TRUE)) %>%
-    ungroup() %>%
-    mutate(pep_number = factor(pep_number, levels=peptides_user$pep_number[sort_idx]))
-
-  peaks = peaks %>%
-    mutate(pep_number = factor(pep_number, levels=peptides_user$pep_number[sort_idx]))
   spp = ggplot(sp) +
-    geom_vline(aes(xintercept=mz), data=peaks, color='grey40', linetype='dashed',
-               linewidth=0.5) +
     # Raw int
-    geom_line(aes(x = mz, y = norm_int), color='grey70', alpha=0.8, linewidth=0.8) +
+    geom_line(aes(x = mz_0, y = norm_int), color='grey70', alpha=0.8, linewidth=0.8) +
     # Smooth int
-    geom_line(aes(x = mz, y = norm_int_wma),
+    geom_line(aes(x = mz_0, y = norm_int_wma),
               color = 'grey10', alpha = 0.8) +
     # Baseline
-    geom_line(aes(x = mz, y = norm_int_bl),
+    geom_line(aes(x = mz_0, y = norm_int_bl),
               color = 'blue1', linetype = "dashed", linewidth=0.8) +
-    geom_line(aes(x = mz, y = norm_int_bl_corr),
+    geom_line(aes(x = mz_0, y = norm_int_bl_corr),
               color = 'brown2', linetype = "solid", alpha=1, linewidth=1) +
     # geom_line(aes(x=mz, y=b_d), color='blue') +
     # geom_text(aes(label=QCflag), x=+Inf, y=+Inf, vjust=1.3, hjust=1.2,
     #           data=sps_clusters[sele]@backend@spectraData) +
-    geom_point(aes(x = mz, y = norm_int), shape = 19, size = 2,
+    geom_vline(aes(xintercept=mz_0), data=peaks, color='grey40', linetype='dashed',
+               linewidth=0.5) +
+    geom_point(aes(x = mz_0, y = norm_int), shape = 19, size = 2,
                data = peaks) +
-    facet_grid(spectra_name~pep_number, scales = 'free', labeller=peptide_labeller) +
+    facet_grid(spectrumId~pep_number, scales = 'free') +
     ylab('Normalized intensity') +
     xlab('') +
     theme_bw() +
@@ -737,7 +791,7 @@ plot_n_peaks_per_peptide = function(peaks, n_isopeaks, min_isopeaks, marker_orde
           axis.ticks.y = element_blank())
   if ('theor_deam' %in% colnames(peaks)) {
     spp = spp +
-      geom_line(aes(x=mz, y=theor_deam), size=1, color='#26828EFF',
+      geom_line(aes(x=mz_0, y=theor_deam), size=1, color='#26828EFF',
                           data = peaks)
 
   }

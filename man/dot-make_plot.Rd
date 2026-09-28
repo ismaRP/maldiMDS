@@ -4,17 +4,10 @@
 \alias{.make_plot}
 \title{Make a faceted preprocessing plot per spectra and peptide}
 \usage{
-.make_plot(
-  sp,
-  peaks,
-  peptides_user,
-  n_isopeaks,
-  norm_func = NULL,
-  peptide_labeller
-)
+.make_plot(sp, peaks, peptide_labeller = NULL)
 }
 \arguments{
-\item{n_isopeaks}{}
+\item{peptide_labeller}{}
 }
 \description{
 Make a faceted preprocessing plot per spectra and peptide

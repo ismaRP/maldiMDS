@@ -64,11 +64,13 @@ lme_mds = function(q2e_vals, logq=TRUE, g=NULL, outdir=NULL,
     q2e_vals = q2e_vals %>% mutate(resp = q2e)
   }
 
+  if (is.null(g)) g = 'free'
+
   ## mixed effect model
   if (g == "free"){
     m = lme(
       resp~0+pep_number,
-      random = ~1|sample/replicate,
+      random = ~1|sample_name/spectrumId,
       weights = varComb(
         varPower(-1/2, form = ~reliability),
         varIdent(form = ~1|pep_number)),
@@ -77,7 +79,7 @@ lme_mds = function(q2e_vals, logq=TRUE, g=NULL, outdir=NULL,
   } else {
     m = lme(
       resp~0+pep_number,
-      random = ~1|sample/replicate,
+      random = ~1|sample_name/spectrumId,
       weight = varComb(
         varFixed(~I(1/reliability)),
         varIdent(form = ~1|pep_number)
@@ -171,14 +173,15 @@ predict_mds = function(model, estimates, new_q2e=NULL, logq=T){
 
   if (is.null(new_q2e)) {
     q2e = model$data
-    mds = q2e %>% group_by(sample) %>%
+    mds = q2e %>% group_by(sample_name) %>%
       summarise(predict_sample(
-        sample, replicate, pep_number, reliability, resp, estimates)) %>%
-      mutate(MDS.Model = ranef(model)[['sample']][,1])
+        sample_name, spectrumId, pep_number, reliability, resp, estimates)) %>%
+      mutate(MDS.Model = ranef(model)[['sample_name']][,1])
     if (logq) {
       mds = mds %>% mutate(
         # MDS.PredictSample = exp(MDS.PredictSample),
-        MDS.Model = exp(MDS.Model)
+        MDS.Model = exp(MDS.Model),
+        MDS.Manual = exp(MDS.Manual)
       )
     }
     q2e_m = q2e %>% ungroup() %>%
@@ -190,13 +193,13 @@ predict_mds = function(model, estimates, new_q2e=NULL, logq=T){
     return(list('pep' = q2e_m, 'sample' = mds))
   } else {
     new_q2e = new_q2e %>%
-      mutate(sample = as.factor(sample), replicate = as.factor(replicate),
+      mutate(sample_name = as.factor(sample_name), spectrumId = as.factor(spectrumId),
              pep_number = as.factor(pep_number))
     # new_q2e = new_q2e %>% filter(residual>0) ## filter dataset to remove 0 reliabilities that resulted in Inf when taken the reciprocal
 
-    mds = new_q2e %>% group_by(sample) %>%
+    mds = new_q2e %>% group_by(sample_name) %>%
       summarise(predict_sample(
-        sample, replicate, pep_number, reliability, resp, estimates))
+        sample_name, spectrumId, pep_number, reliability, resp, estimates))
     q2e_m = new_q2e %>%
       mutate(
         predicted_q = predict(model, new_q2e)
@@ -236,13 +239,14 @@ predict_mds = function(model, estimates, new_q2e=NULL, logq=T){
 #' @export
 #' @importFrom tibble tibble
 #' @examples
-predict_sample <- function(sample, replicate, pep_number, reliability, resp, pars) {
+predict_sample <- function(sample_name, spectrumId, pep_number, reliability, resp, pars) {
 
   data_I_s = data.frame(
-    sample = sample, replicate = replicate, pep_number = pep_number,
+    sample_name = sample_name, spectrumId = spectrumId, pep_number = pep_number,
     reliability = reliability, resp = resp)
 
   alpha = pars$alpha
+
   sigma2_S = pars$sigma2_S
   sigma2_R = pars$sigma2_R
   gamma = pars$gamma
@@ -257,19 +261,24 @@ predict_sample <- function(sample, replicate, pep_number, reliability, resp, par
     if (length(unique(data_I_s$sample)) != 1) stop("Observations must come from the same sample.")
     # build Xi
     Xi = sigma2_S * matrix(1, nrow(data_I_s), nrow(data_I_s)) +
-      sigma2_R * outer(data_I_s$replicate, data_I_s$replicate, function(x,y){as.numeric(x == y)}) +
+      sigma2_R * outer(data_I_s$spectrumId, data_I_s$spectrumId, function(x,y){as.numeric(x == y)}) +
       diag((data_I_s$reliability^(2*gamma)) * sigma2[as.character(data_I_s$pep_number)], nrow = nrow(data_I_s))
+
+    # Xi = sigma2_S * matrix(1, nrow(data_I_s), nrow(data_I_s)) +
+    #   sigma2_R * outer(data_I_s$Replicates, data_I_s$Replicates, function(x,y){as.numeric(x == y)}) +
+    #   diag((data_I_s$Reliability^(2*gamma)) * sigma2[as.character(data_I_s$Peptides)],nrow=nrow(data_I_s))
     # prediction
     # We don't need the estimate, as the ranef function provides it
-    # E_X = sigma2_S * sum(solve(Xi, data_I_s$resp - alpha[as.character(data_I_s$pep_number)]))
+    E_X = sigma2_S * sum(solve(Xi, data_I_s$resp - alpha[as.character(data_I_s$pep_number)]))
     # variance
     var_X = sigma2_S - (sigma2_S^2) * sum(solve(Xi, rep(1, nrow(data_I_s))))
+
   }
 
   # return
-  # names(E_X) = names(var_X) <- NULL
+  names(var_X) = names(E_X) <- NULL
   # return(tibble(MDS.PredictSample = E_X, sd = sqrt(var_X)))
-  return(tibble(sd = sqrt(var_X)))
+  return(tibble(MDS.Manual = E_X, sd = sqrt(var_X)))
 }
 
 
@@ -286,14 +295,15 @@ predict_sample <- function(sample, replicate, pep_number, reliability, resp, par
 extract_estimates = function(m) {
   q_data = m$data
   alpha.m = fixef(m)
-  names(alpha.m) = substr(names(alpha.m), 9, 12) ## to align the code, remove Peptides from the names
+  names(alpha.m) = substr(names(alpha.m), 11, nchar(names(alpha.m))) ## to align the code, remove Peptides from the names
   tmp = coef(m$modelStruct$reStruct, FALSE) * (m$sigma^2)
-  sigma2_S.m = tmp["sample.var((Intercept))"] ## variance parameter estimate for sample
-  sigma2_R.m = tmp["replicate.var((Intercept))"] ## variance parameter estimate for replicate
+  sigma2_S.m = tmp["sample_name.var((Intercept))"] ## variance parameter estimate for sample
+  sigma2_R.m = tmp["spectrumId.var((Intercept))"] ## variance parameter estimate for replicate
   gamma.m = coef(m$modelStruct$varStruct$A, FALSE)
-  sigma2.m = m$sigma * c("pep1" = 1, coef(m$modelStruct$varStruct$B, FALSE))^2
+  p1 = levels(q_data$pep_number)[1]
+  sigma2.m = m$sigma * c(1, coef(m$modelStruct$varStruct$B, FALSE))^2
+  names(sigma2.m) = c(p1, names(sigma2.m)[2:length(sigma2.m)])
   sigma2.m = sigma2.m[match(levels(q_data$pep_number), names(sigma2.m))]
-
   return(list(alpha = alpha.m, sigma2_S = sigma2_S.m, sigma2_R = sigma2_R.m,
               gamma = gamma.m, sigma2 = sigma2.m))
 }

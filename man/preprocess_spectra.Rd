@@ -6,7 +6,6 @@
 \usage{
 preprocess_spectra(
   indir = NULL,
-  metadata = NULL,
   mzml_files = NULL,
   spectrum_file_name = NULL,
   sps_mzr = NULL,
@@ -25,23 +24,14 @@ preprocess_spectra(
 \arguments{
 \item{indir}{Folder containing spectra in mzML format.}
 
-\item{metadata}{Data frame with spectra metadata.
-It contains the following columns:
-\itemize{
-\item \code{sample_name}
-\item \code{replicate}
-\item Optionally, a column specifying taxonomic identification, as specified by \code{taxon_column}
-Any spectra not present in \code{metadata} is not further analysed. Conversely, the function checks all the entries in \code{metadata}
-have a corresponding file or spectrum.
-}}
-
 \item{mzml_files}{Paths to mzML files}
 
 \item{spectrum_file_name}{If mzml_files are provided, whether to use file names
 as spectra names. Otherwise, it is assumed the the spectra IDs are in the mzML
 files' headers.}
 
-\item{sps_mzr}{Spectra object}
+\item{sps_mzr}{Spectra object. Alternatively to passing \code{indir} and/or \code{mzml_files},
+it is possible to pass a Spectra object directly.}
 
 \item{peptides_user}{DataFrame with peptides to be used to calculate glutamine q2e deamidation on.
 It must contain the following columns:
@@ -62,7 +52,7 @@ plot more spectra, call the function multiple times.}
 \item{taxon_factor}{Factor to split spectra by taxon if a different set of peptides is
 to be used for each.}
 
-\item{taxon_column}{Column in \code{metadata} and \code{peptides_user} with the taxonomic ID used
+\item{taxon_column}{Column in \code{peptides_user} with the taxonomic ID used
 for splitting the analysis.}
 
 \item{verbose}{Whether to output progress}
@@ -142,9 +132,7 @@ A function used to transform the facet labels. See \code{\link[ggplot2:facet_wra
 }}
 }
 \value{
-A list of dataframes, 1 per sample. Each dataframe has 3 columns,
-m/z, intensity and signal-to-noise ratio for each of the n_isopeaks from each
-peptide. Missing peaks are NAs.
+A dataframes. Missing peaks are NAs.
 }
 \description{
 Performs smoothening, baseline removal and peak detection on MALDI samples.
@@ -157,16 +145,11 @@ Provide the input data either:
 \item provide a list of paths to \code{mzml_files}
 \item provide a \code{Spectra} object directly in \code{sps_mzr}.
 If data is provided using more than one of the options, the \code{sps_mzr} is used, and then the \code{mzml_files}.
-If metadata is provided, only the spectra specified in it will be used, even if \code{indir} contains more files
 }
 
 In order to split spectra by taxa to be analysed with different peptides:
-\itemize{
-\item taxon_factor can be a factor specifying the split. The order must match that of the input data.
+taxon_factor is a factor specifying the split. The order must match that of the input data.
 Then use taxon_column to specify the column of the \code{peptides_user} that contains the taxon.
-\item If only \code{taxon_column} is specified, it must be a column in both metadata containing the taxonomic ID
-and in the \code{peptides_user} dataframe.
-}
 }
 \references{
 Nair, B. et al. (2022) ‘Parchment Glutamine Index (PQI):
