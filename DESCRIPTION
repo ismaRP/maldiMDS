@@ -37,7 +37,8 @@ Imports:
     MALDIrppa,
     MALDIzooMS (>= 0.1.0),
     Spectra (>= 1.14.0),
-    BiocParallel
+    BiocParallel,
+    fs
 URL: https://github.com/ismaRP/maldiMDS
 BugReports: https://github.com/ismaRP/maldiMDS/issues
 Depends: 
