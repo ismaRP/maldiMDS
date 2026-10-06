@@ -2,13 +2,24 @@
 % Please edit documentation in R/preprocess_data.R
 \name{calc_n_frac_peaks}
 \alias{calc_n_frac_peaks}
-\title{Title}
+\title{Calculate peaks detected
+Calculate fraction of samples with more than N peaks (min_isopeaks <= N <= n_isopeaks)
+detected for a peptide}
 \usage{
 calc_n_frac_peaks(x, n_isopeaks, min_isopeaks)
 }
 \arguments{
-\item{min_isopeaks}{}
+\item{x}{Vector with number of peaks detected for a given peptide for each sample}
+
+\item{n_isopeaks}{Number of isotopic peaks attempted to extract}
+
+\item{min_isopeaks}{Minimum number of isotopic peaks allowed}
+}
+\value{
+\code{data.frame} with fractions for each N
 }
 \description{
-Title
+Calculate peaks detected
+Calculate fraction of samples with more than N peaks (min_isopeaks <= N <= n_isopeaks)
+detected for a peptide
 }

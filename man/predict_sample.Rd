@@ -2,14 +2,22 @@
 % Please edit documentation in R/lme_mds.R
 \name{predict_sample}
 \alias{predict_sample}
-\title{Title}
+\title{Perform prediction of MDS and associated SD on a given sample}
 \usage{
 predict_sample(sample_name, spectrumId, pep_number, reliability, resp, pars)
 }
 \arguments{
+\item{sample_name}{Sample name}
+
+\item{spectrumId}{Unique spectrum ID or replicate within a sample}
+
+\item{pep_number}{Peptide identifier}
+
+\item{reliability}{Reliability (1-residual)}
+
 \item{resp}{Response variable, either q or Logq}
 
-\item{pars}{Contains the following parameters:
+\item{pars}{Contains the following estimates as extracted by \link{extract_estimates}:
 \describe{
 \item{data_I_s}{part of the data frame corresponding to Sample s.}
 \item{alpha}{estimate for fixed effect}
@@ -23,5 +31,5 @@ predict_sample(sample_name, spectrumId, pep_number, reliability, resp, pars)
 tibble with predicted sample MDS and standard deviation
 }
 \description{
-Title
+Perform prediction of MDS and associated SD on a given sample
 }

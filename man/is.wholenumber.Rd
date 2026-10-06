@@ -7,6 +7,8 @@
 is.wholenumber(x, tol = .Machine$double.eps^0.5)
 }
 \arguments{
+\item{x}{\code{numeric} to check}
+
 \item{tol}{numreric tolerance. Default is \code{.Machine$double.eps^0.5}}
 }
 \value{

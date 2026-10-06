@@ -2,7 +2,10 @@
 % Please edit documentation in R/wls_q2e.R
 \name{lm_q2e_intercept}
 \alias{lm_q2e_intercept}
-\title{Fit a linear model using weights and intercept}
+\alias{wlm_q2e_intercept}
+\alias{wlm_q2e}
+\alias{lm_q2e}
+\title{Calculate q2e for a single peptide and sample or replicate}
 \usage{
 lm_q2e_intercept(
   norm_int = NULL,
@@ -12,15 +15,69 @@ lm_q2e_intercept(
   data = NULL,
   return_model = FALSE
 )
+
+wlm_q2e_intercept(
+  norm_int = NULL,
+  weight = NULL,
+  deam_0 = NULL,
+  deam_1 = NULL,
+  deam_2 = NULL,
+  data = NULL,
+  return_model = FALSE
+)
+
+wlm_q2e(
+  norm_int = NULL,
+  weight = NULL,
+  deam_0 = NULL,
+  deam_1 = NULL,
+  deam_2 = NULL,
+  data = NULL,
+  return_model = FALSE
+)
+
+lm_q2e(
+  norm_int = NULL,
+  deam_0 = NULL,
+  deam_1 = NULL,
+  deam_2 = NULL,
+  data = NULL,
+  return_model = FALSE
+)
 }
 \arguments{
-\item{return_model}{}
+\item{norm_int}{Normalized intensity of the isotopic peaks}
+
+\item{deam_0}{Intensity of the peak in the native, non-deamidated theoretical envelope}
+
+\item{deam_1}{Itensity of the corresponding peak in the peptide with 1 deamidation}
+
+\item{deam_2}{Itensity of the corresponding peak in the peptide with 2 deamidations
+(0 if the peptide only has one glutamine)}
+
+\item{data}{If the previous are just column names in a data.frame, the data
+must be passed here}
+
+\item{return_model}{\code{logical}, whether to return the whole model}
+
+\item{weight}{Weight of the peak as calculated by \link{preprocess_spectra}.
+If using a model without weighting, it is ignored}
+}
+\value{
+a \code{data.frame} with \code{q2e}, intercept, gamma and residual estimates
 }
 \description{
-For use after group_by on samples and peptide index
+Fit a linear model from the theoretical native and deamidated envelopes to an
+experimental isotopic envelope.
+}
+\details{
+For use after group_by on samples and peptide index, or providing the data
+directly.
 }
 \examples{
+\dontrun{
 q2e_vals = peaks \%>\% filter(n_peaks > 0) \%>\%
-  group_by(sample, replicate, pep_number) \%>\%
-  summarise(lm_q2e_intercept(norm_int, weight, deam_0, deam_1, deam_2))
+  group_by(sample_name, spectrumId, pep_number) \%>\%
+  summarise(wlm_q2e(norm_int, weight, deam_0, deam_1, deam_2))
+}
 }

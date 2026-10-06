@@ -2,17 +2,61 @@
 % Please edit documentation in R/util_functions.R
 \name{isotopic_deam_mat}
 \alias{isotopic_deam_mat}
+\alias{isotopic_deam_df}
+\alias{deamidation_coeffs}
+\alias{isotopic_deam}
 \title{Isotopic distribution of deamidated peptides
-It produces the isotopic distribution of  peptides with a given extent
+It produces the isotopic distribution of peptides with a given extent
 of deamidation.}
 \usage{
 isotopic_deam_mat(iso_peps, max_Q, q2e = 0.5, norm_func = NULL)
+
+isotopic_deam_df(iso_peps, q2e = 0.5, norm_func = NULL)
+
+deamidation_coeffs(q2e, max_Q, ndeam)
+
+isotopic_deam(q2e = 0.5, norm_func, max_Q, ...)
 }
 \arguments{
-\item{q2e}{}
+\item{iso_peps}{Isotopic envelopes}
+
+\item{max_Q}{Maximum number of deamidations per peptide (equal to number of glutamines in the peptide)}
+
+\item{q2e}{Fraction of deamidation}
+
+\item{norm_func}{A function used to normalize isotopic envelope intensities}
+
+\item{ndeam}{Number of deamidation to consider}
+
+\item{...}{Vectors \verb{"deam_0", "deam_1}, ... relative intensities of each ppeptide and isotopic
+position for 0, 1, ... deamidations}
+}
+\value{
+\itemize{
+\item \code{isotopic_deam_mat} returns \code{matrix} with a theoretical isotopic envelope
+of a peptide per row, with the given q2e deamidation
+\item ``
+}
 }
 \description{
 Isotopic distribution of deamidated peptides
-It produces the isotopic distribution of  peptides with a given extent
+It produces the isotopic distribution of peptides with a given extent
 of deamidation.
+
+Calculate the coefficients of each of the non or deamidated peptides
+for a given global q2e
+
+Calculate the isotopic envelope of a deamidated peptide
+}
+\section{Functions}{
+\itemize{
+\item \code{deamidation_coeffs()}: Calculate the coefficients of each of the non or deamidated peptides
+for a given global q2e
+
+\item \code{isotopic_deam()}: Calculate the isotopic envelope of a deamidated peptide
+
+}}
+\examples{
+isodists = get_isodists(parchment_peptides$sequence, 3, parchment_peptides$n_hyp, sum, TRUE)
+isotopic_deam_df(isodists, 0.7, sum)
 }

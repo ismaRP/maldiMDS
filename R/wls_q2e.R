@@ -1,23 +1,77 @@
 
 
-#' Fit a linear model using weights and intercept
+#' Estimate Q2E per peptide using a variant of a least squares regression
 #'
-#' For use after group_by on samples and peptide index
+#' @param peaks data.frame. Isotopic peaks data produced by [preprocess_spectra()]
+#' @param lm_use Function. Model variant to use: [wlm_q2e_intercept()] (default), [lm_q2e_intercept],
+#' [wlm_q2e()], or [lm_q2e()]
+#' @param by_spectrum Logical. Whether to calculate a value per replicate/spectrum (`TRUE`, default)
+#' or sample (`FALSE`).
 #'
-#' @param norm_int
-#' @param weight
-#' @param deam_0
-#' @param deam_1
-#' @param deam_2
-#' @param return_model
-#'
-#' @return
+#' @returns A `data.frame` contaning Q2E estimates with the following columns:
+#'  * `sample_name`
+#'  * `spectrumId` optional, only if `by_spectrum` is `TRUE`
+#'  * `pep_number`
+#'  * `gamma_0` coefficient of the native, non-deamidated peptide
+#'  * `gamma_1` coefficient of the peptide with 1 deamidation
+#'  * `gamma_2` coefficient of the peptide with 2 demidations. Only for markers with
+#'  2 glutamines, other with it is `NA`
+#'  * `q2e` Ratio of deamidated to total. This is \deqn{1-\frac{gamma_0}{gamma_0 + gamma_1 + gamma_2}}
+#'  * `intercept` optional, only if using a linear model with free intercept
+#'  * `residual` Squared root of the sum of the squared residuals
+#'  * `reliability` 1 - `residual`
 #' @export
+#' @importFrom dplyr group_by summarise mutate
+wls_q2e = function(
+    peaks,
+    lm_use = c(wlm_q2e_intercept, lm_q2e_intercept, wlm_q2e, lm_q2e),
+    by_spectrum = TRUE) {
+
+  if (by_spectrum) {
+    q2e_vals = peaks %>%
+      group_by(sample_name, spectrumId, pep_number) %>%
+      summarise(lm_use(norm_int, weight, deam_0, deam_1, deam_2)) %>%
+      mutate(reliability = 1 - residual)
+  } else {
+    q2e_vals = peaks %>%
+      group_by(sample_name, pep_number) %>%
+      summarise(lm_use(norm_int, weight, deam_0, deam_1, deam_2)) %>%
+      mutate(reliability = 1 - residual)
+  }
+  return(q2e_vals)
+
+}
+
+
+
+#' Calculate q2e for a single peptide and sample or replicate
 #'
+#' Fit a linear model from the theoretical native and deamidated envelopes to an
+#' experimental isotopic envelope.
+#'
+#' For use after group_by on samples and peptide index, or providing the data
+#' directly.
+#'
+#' @param norm_int Normalized intensity of the isotopic peaks
+#' @param weight Weight of the peak as calculated by [preprocess_spectra].
+#' If using a model without weighting, it is ignored
+#' @param deam_0 Intensity of the peak in the native, non-deamidated theoretical envelope
+#' @param deam_1 Itensity of the corresponding peak in the peptide with 1 deamidation
+#' @param deam_2 Itensity of the corresponding peak in the peptide with 2 deamidations
+#' (0 if the peptide only has one glutamine)
+#' @param data If the previous are just column names in a data.frame, the data
+#' must be passed here
+#' @param return_model `logical`, whether to return the whole model
+#'
+#' @return a `data.frame` with `q2e`, intercept, gamma and residual estimates
+#' @export
+#' @importFrom stats lm na.exclude
 #' @examples
+#' \dontrun{
 #' q2e_vals = peaks %>% filter(n_peaks > 0) %>%
-#'   group_by(sample, replicate, pep_number) %>%
-#'   summarise(lm_q2e_intercept(norm_int, weight, deam_0, deam_1, deam_2))
+#'   group_by(sample_name, spectrumId, pep_number) %>%
+#'   summarise(wlm_q2e(norm_int, weight, deam_0, deam_1, deam_2))
+#' }
 lm_q2e_intercept = function(norm_int = NULL,
                             deam_0 = NULL, deam_1 = NULL, deam_2 = NULL,
                             data = NULL,
@@ -54,23 +108,7 @@ lm_q2e_intercept = function(norm_int = NULL,
 }
 
 
-#' Fit a linear model using weights and intercept
-#'
-#' For use after group_by on samples and peptide index
-#'
-#' @param norm_int
-#' @param weight
-#' @param deam_0
-#' @param deam_1
-#' @param deam_2
-#'
-#' @return
-#' @export
-#'
-#' @examples
-#' q2e_vals = peaks %>% filter(n_peaks > 0) %>%
-#'   group_by(sample, replicate, pep_number) %>%
-#'   summarise(wlm_q2e_intercept(norm_int, weight, deam_0, deam_1, deam_2))
+#' @rdname lm_q2e_intercept
 wlm_q2e_intercept = function(norm_int = NULL, weight = NULL,
                              deam_0 = NULL, deam_1 = NULL, deam_2 = NULL,
                              data = NULL,
@@ -110,24 +148,7 @@ wlm_q2e_intercept = function(norm_int = NULL, weight = NULL,
 }
 
 
-#' Fit a linear model with weights and forcing a 0 intercept
-#'
-#' For use after group_by on samples and peptide index
-#'
-#' @param norm_int
-#' @param weight
-#' @param deam_0
-#' @param deam_1
-#' @param deam_2
-#'
-#' @return
-#' @export
-#'
-#' @examples
-#' q2e_vals = peaks %>% filter(n_peaks > 0) %>%
-#'   group_by(sample, replicate, pep_number) %>%
-#'   summarise(wlm_q2e(norm_int, weight, deam_0, deam_1, deam_2))
-#'
+#' @rdname lm_q2e_intercept
 wlm_q2e = function(norm_int = NULL, weight = NULL,
                    deam_0 = NULL, deam_1 = NULL, deam_2 = NULL,
                    data = NULL,
@@ -165,23 +186,7 @@ wlm_q2e = function(norm_int = NULL, weight = NULL,
 }
 
 
-#' Fit a linear model without weights and forcing a 0 intercept
-#'
-#' For use after group_by on samples and peptide index
-#'
-#' @param norm_int
-#' @param weight
-#' @param deam_0
-#' @param deam_1
-#' @param deam_2
-#'
-#' @return
-#' @export
-#'
-#' @examples
-#' q2e_vals = peaks %>% filter(n_peaks > 0) %>%
-#'    group_by(sample, replicate, pep_number) %>%
-#'    summarise(lm_q2e(norm_int, weight, deam_0, deam_1, deam_2))
+#' @rdname lm_q2e_intercept
 lm_q2e = function(norm_int = NULL,
                   deam_0 = NULL, deam_1 = NULL, deam_2 = NULL,
                   data = NULL,
@@ -232,9 +237,9 @@ lm_q2e = function(norm_int = NULL,
 #' @param weights Column of weights in \code{peaks_df}
 #' @param intercept Logical, whether to fit an intercept or not
 #' @return A data.frame with q2e estimates
+#' @importFrom stats lm as.formula
 #' @export
 #'
-#' @examples
 lm_q2e_oneshot = function(peaks_df, intensity='norm_int', weights=NULL, intercept=FALSE){
 
   # Prepare formula

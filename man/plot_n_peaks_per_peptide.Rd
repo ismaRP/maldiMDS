@@ -7,8 +7,22 @@
 plot_n_peaks_per_peptide(peaks, n_isopeaks, min_isopeaks, marker_order, ...)
 }
 \arguments{
-\item{marker_order}{}
+\item{peaks}{Peaks data.frame produced by \link{preprocess_spectra}}
+
+\item{n_isopeaks}{Number of isotopic peaks attempted to extract by \link{preprocess_spectra}}
+
+\item{min_isopeaks}{Minimum number of isotopic peaks allowed by \link{preprocess_spectra}}
+
+\item{marker_order}{Custom order of marker peptides. If it's not defined, it will
+use the order as they appear in \code{peaks}}
+
+\item{...}{Additional variables for faceting}
+}
+\value{
+A ggplot object
 }
 \description{
-Plotting the number of isotopic peaks detected
+This plots the fraction of samples with N (min_isopeaks <= N <= n_isopeaks)
+peaks or more detected per peptide marker in a stacked bar. Additional variables
+can be added for faceting
 }

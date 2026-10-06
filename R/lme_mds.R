@@ -1,10 +1,10 @@
 
 #' Calculate MDS using linear mixed effect model from q2e estimates
 #'
-#' @param q2e data.frame with q2e estimations per sample, replicate and peptide
+#' @param q2e_vals data.frame with q2e estimations per sample, replicate and peptide
 #' @param logq Whether q values are log-scaled before entering the LME model
 #' @param g Reliability power in the error normal distribution from linear mixed effects model
-#' @param return_model
+#' @param return_model `logical`. Whether to return the lme model object
 #' @param outdir Optional. directory where results tables and plots are saved
 #'
 #' @return list contaning the following:
@@ -54,7 +54,6 @@
 #' @importFrom stats complete.cases fitted residuals
 #' @export
 #'
-#' @examples
 lme_mds = function(q2e_vals, logq=TRUE, g=NULL, outdir=NULL,
                    return_model=F){
 
@@ -80,7 +79,7 @@ lme_mds = function(q2e_vals, logq=TRUE, g=NULL, outdir=NULL,
     m = lme(
       resp~0+pep_number,
       random = ~1|sample_name/spectrumId,
-      weight = varComb(
+      weights = varComb(
         varFixed(~I(1/reliability)),
         varIdent(form = ~1|pep_number)
       ),
@@ -153,22 +152,21 @@ lme_mds = function(q2e_vals, logq=TRUE, g=NULL, outdir=NULL,
 }
 
 
-#' Title
+#' Predict MDS for samples
 #'
 #' @param model lme model object
 #' @param new_q2e New q2e data for which MDS is predicted using the trained model
 #' q is stored in a column called "resp"
 #' @param logq whether q is in log-scale in q2e or new_q2e
-#' @param estimates
+#' @param estimates Contains estimates as extracted by [extract_estimates]:
 #'
 #' @importFrom nlme lme ranef
 #' @importFrom stats predict
 #' @importFrom dplyr mutate filter group_by summarise
 #' @importFrom tibble as_tibble
 #' @importFrom stats complete.cases fitted residuals
-#' @return
+#' @return `list` with peptide and sample level MDS predictions.
 #' @export
-#' @examples
 predict_mds = function(model, estimates, new_q2e=NULL, logq=T){
 
   if (is.null(new_q2e)) {
@@ -217,16 +215,15 @@ predict_mds = function(model, estimates, new_q2e=NULL, logq=T){
 }
 
 
-## Predict sample function
-#' Title
+#' Perform prediction of MDS and associated SD on a given sample
 #'
-#' @param Sample
-#' @param Replicates
-#' @param Peptides
-#' @param Reliability
+#' @param sample_name Sample name
+#' @param spectrumId Unique spectrum ID or replicate within a sample
+#' @param pep_number Peptide identifier
+#' @param reliability Reliability (1-residual)
 #' @param resp Response variable, either q or Logq
 #'
-#' @param pars Contains the following parameters:
+#' @param pars Contains the following estimates as extracted by [extract_estimates]:
 #' \describe{
 #'     \item{data_I_s}{part of the data frame corresponding to Sample s.}
 #'     \item{alpha}{estimate for fixed effect}
@@ -238,7 +235,6 @@ predict_mds = function(model, estimates, new_q2e=NULL, logq=T){
 #' @return tibble with predicted sample MDS and standard deviation
 #' @export
 #' @importFrom tibble tibble
-#' @examples
 predict_sample <- function(sample_name, spectrumId, pep_number, reliability, resp, pars) {
 
   data_I_s = data.frame(
@@ -282,16 +278,22 @@ predict_sample <- function(sample_name, spectrumId, pep_number, reliability, res
 }
 
 
-#' Title
+#' Extract estimates from nlme model
 #'
-#' @param m
-#' @param q_data
+#' @param m nlme model
 #'
-#' @return
+#' @return list with estimates:
+#' \describe{
+#'     \item{data_I_s}{part of the data frame corresponding to Sample s.}
+#'     \item{alpha}{estimate for fixed effect}
+#'     \item{sigma2_S}{estimate for variance for random effect of sample.}
+#'     \item{sigma2_R}{estimate for variance for random effect of replication.}
+#'     \item{gamma}{estimate for half power on Reliability}
+#'     \item{sigma2}{estimate for variance for on the different peptides. This should be a named vector.}
+#'}
 #' @importFrom nlme fixef
 #' @importFrom stats coef
 #'
-#' @examples
 extract_estimates = function(m) {
   q_data = m$data
   alpha.m = fixef(m)
@@ -314,25 +316,24 @@ extract_estimates = function(m) {
 #'
 #' @param mds_m data.frame of model estimates per replicate and peptide
 #' @param title Plot title
-#' @param peptides_user A dataframe with peptide information. It must contain at least 3 columns,
+#' @param pep_table A dataframe with peptide information. It must contain at least 3 columns,
 #' peptide number or ID, name, and m/z. If NULL, default peptides are used.
-#' The number or ID must have the form Pep# and be in the first column.  See \code{\link[https://github.com/ismaRP/MALDIzooMS]{getIsoPeaks}} details.
+#' The number or ID must have the form Pep# and be in the first column.
 #' @param label_idx Index where to pull the labels from peptides
 #' @param label_func labeller function to process labels. See \code{\link[ggplot2]{labeller}}
 #' Default is label_value.
 #'
-#' @return
-#' @importFrom ggplot2 geom_qq geom_qq_line facet_wrap
-#' @importFrom ggplot2 ylab xlab ggtitle
+#' @return `ggplot` plot object
+#' @importFrom ggplot2 geom_qq geom_qq_line facet_wrap as_labeller labeller
+#' @importFrom ggplot2 guide_legend guides aes
+#' @importFrom ggplot2 ylab xlab ggtitle theme element_text theme_bw unit
+#' @importFrom dplyr pull
 #' @export
 #'
-#' @examples
-pept_qqplot = function(mds_m, title="", peptides_user=NULL, label_idx=2,
+pept_qqplot = function(mds_m, pep_table, title="", label_idx=2,
                        label_func = label_value){
-
-  if (is.null(peptides_user)) peptides_user = peptides
-  pept_labels = pull(peptides_user, label_idx)
-  pept_number = pull(peptides_user, 1)
+  pept_labels = pull(pep_table, label_idx)
+  pept_number = pull(pep_table, 1)
   names(pept_labels) = pept_number
 
   qq_plot = ggplot(mds_m) +
@@ -357,25 +358,24 @@ pept_qqplot = function(mds_m, title="", peptides_user=NULL, label_idx=2,
 #'
 #' @param mds_m data.frame of model estimates per replicate and peptide
 #' @param title Plot title
-#' @param peptides_user A dataframe with peptide information. It must contain at least 3 columns,
+#' @param pep_table A dataframe with peptide information. It must contain at least 3 columns,
 #' peptide number or ID, name, and m/z. If NULL, default peptides are used.
-#' The number or ID must have the form Pep# and be in the first column. See \code{\link[https://github.com/ismaRP/MALDIzooMS]{getIsoPeaks}} details.
+#' The number or ID must have the form Pep# and be in the first column.
 #' @param label_idx Index where to pull the labels from peptides
 #' @param label_func labeller function to process labels. See \code{\link[ggplot2]{labeller}}
 #' Default is label_value.
 #'
-#' @return
-#' @importFrom ggplot2 geom_point facet_wrap
-#' @importFrom ggplot2 ylab xlab ggtitle
+#' @return `ggplot` plot object
+#' @importFrom ggplot2 geom_point facet_wrap ggplot theme unit
+#' @importFrom ggplot2 ylab xlab ggtitle aes element_text guides guide_legend
+#' @importFrom dplyr pull
 #' @export
 #'
-#' @examples
-fvsr = function(mds_m, title="", peptides_user=NULL, label_idx=2,
+fvsr = function(mds_m, pep_table, title="", label_idx=2,
                 label_func = label_value){
 
-  if (is.null(peptides_user)) peptides_user = peptides
-  pept_labels = pull(peptides_user, label_idx)
-  pept_number = pull(peptides_user, 1)
+  pept_labels = pull(pep_table, label_idx)
+  pept_number = pull(pep_table, 1)
   names(pept_labels) = pept_number
 
   fvsr_plot = ggplot(mds_m) +

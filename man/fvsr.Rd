@@ -4,27 +4,24 @@
 \alias{fvsr}
 \title{Fitted versus residuals plot per peptide}
 \usage{
-fvsr(
-  mds_m,
-  title = "",
-  peptides_user = NULL,
-  label_idx = 2,
-  label_func = label_value
-)
+fvsr(mds_m, pep_table, title = "", label_idx = 2, label_func = label_value)
 }
 \arguments{
 \item{mds_m}{data.frame of model estimates per replicate and peptide}
 
-\item{title}{Plot title}
-
-\item{peptides_user}{A dataframe with peptide information. It must contain at least 3 columns,
+\item{pep_table}{A dataframe with peptide information. It must contain at least 3 columns,
 peptide number or ID, name, and m/z. If NULL, default peptides are used.
-The number or ID must have the form Pep# and be in the first column. See \code{\link[https://github.com/ismaRP/MALDIzooMS]{getIsoPeaks}} details.}
+The number or ID must have the form Pep# and be in the first column.}
+
+\item{title}{Plot title}
 
 \item{label_idx}{Index where to pull the labels from peptides}
 
 \item{label_func}{labeller function to process labels. See \code{\link[ggplot2]{labeller}}
 Default is label_value.}
+}
+\value{
+\code{ggplot} plot object
 }
 \description{
 Fitted versus residuals plot per peptide

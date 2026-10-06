@@ -2,13 +2,18 @@
 % Please edit documentation in R/preprocess_data.R
 \name{.make_plot}
 \alias{.make_plot}
-\title{Make a faceted preprocessing plot per spectra and peptide}
+\title{Make a faceted spectral plot per spectra and peptide}
 \usage{
 .make_plot(sp, peaks, peptide_labeller = NULL)
 }
 \arguments{
-\item{peptide_labeller}{}
+\item{sp}{A \code{data.frame} with raw and preprocessed profile spectral data}
+
+\item{peaks}{A \code{data.frame} with peaks data}
+
+\item{peptide_labeller}{A ggplot \code{\link[ggplot2:labeller]{ggplot2::labeller()}} type function}
 }
 \description{
-Make a faceted preprocessing plot per spectra and peptide
+It shows the raw, processed spectra and detected peaks per peptide marker
+region and spectrum.
 }

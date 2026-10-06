@@ -11,6 +11,9 @@ normalize_intensity(intensity, norm_func)
 
 \item{norm_func}{Normalising function. Takes a vector of intensities as input.}
 }
+\value{
+Numerical vector with normalized intensities
+}
 \description{
 Normalize vector of intensities to the highest
 }

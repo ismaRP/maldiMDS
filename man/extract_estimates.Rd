@@ -2,13 +2,24 @@
 % Please edit documentation in R/lme_mds.R
 \name{extract_estimates}
 \alias{extract_estimates}
-\title{Title}
+\title{Extract estimates from nlme model}
 \usage{
 extract_estimates(m)
 }
 \arguments{
-\item{q_data}{}
+\item{m}{nlme model}
+}
+\value{
+list with estimates:
+\describe{
+\item{data_I_s}{part of the data frame corresponding to Sample s.}
+\item{alpha}{estimate for fixed effect}
+\item{sigma2_S}{estimate for variance for random effect of sample.}
+\item{sigma2_R}{estimate for variance for random effect of replication.}
+\item{gamma}{estimate for half power on Reliability}
+\item{sigma2}{estimate for variance for on the different peptides. This should be a named vector.}
+}
 }
 \description{
-Title
+Extract estimates from nlme model
 }

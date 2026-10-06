@@ -9,7 +9,7 @@
   pep_table,
   verbose,
   parparam,
-  chunk_size,
+  chunk_size = 40,
   smooth_wma_hws = 4L,
   smooth_sg_hws = 6L,
   iterations = 50L,
@@ -27,6 +27,95 @@
   min_isopeaks = 4,
   norm_func = NULL
 )
+}
+\arguments{
+\item{sps_mzr}{Spectra object. Alternatively to passing \code{indir} and/or \code{mzml_files},
+it is possible to pass a Spectra object directly.}
+
+\item{pep_table}{DataFrame with peptides to be used to calculate glutamine q2e deamidation on.
+It must contain the following columns:
+* \code{mass} with peptide M+H monoisotopic masses
+* \code{sequence}
+* \code{n_hyp} number of hydroxyprolines
+* \code{pep_number} a peptide number or ID, which can be the same across taxa. Eg. pep1, pep2, ...
+* \code{pep_name} optional. Additional peptide name, this could be the ZooMS marker name
+* \code{taxon_column} optional. If For markers, taxa that this peptide marker belongs to, if the preprocessing
+is split by taxa.}
+
+\item{verbose}{Whether to output progress}
+
+\item{parparam}{instance of\link[BiocParallel:BiocParallelParam-class]{BiocParallel::BiocParallelParam} options}
+
+\item{chunk_size}{\code{integer}.
+Processing chunk size i.e. how many spectra are loaded and processed in a chunk.
+Keep in mind there will be \code{ncores} chunks processed in parallel.
+Default is 40L.}
+
+\item{smooth_wma_hws}{\code{integer}.
+Half-window size for WeightedMovingAverage smoothing method. Default 4.}
+
+\item{smooth_sg_hws}{\code{integer}.
+Half-window size for SavitzkyGolay smoothing method. Default 6.}
+
+\item{iterations}{\code{integer}.
+Iterations parameter for baseline detection using SNIP algorithm (see \code{\link[MsCoreUtils:estimateBaseline]{MsCoreUtils::estimateBaseline()}}). Default 50.}
+
+\item{halfWindowSize}{\code{integer}.
+Half-window size parameter for local maximum detection. Default 20.}
+
+\item{snr}{\code{numeric}.
+Signal-to-noise threshold above which peaks are considered.
+Only used for the SuperSmoother or MAD noise estimates.
+For local background estimation, see params \code{local_bg}, \code{mass_range} and \code{bg_cutoff} and \code{l_cutoff}.
+Default 2.}
+
+\item{k}{\code{integer}.
+\code{k} parameter for \code{\link[MsCoreUtils:refineCentroids]{MsCoreUtils::refineCentroids()}} Default is 0L, i.e. do not perform centroid refinement.}
+
+\item{threshold}{\code{numeric}.
+threshold parameter for \code{\link[MsCoreUtils:refineCentroids]{MsCoreUtils::refineCentroids()}} Default is 0.33, meaning only intensities above 0.33*maximal peak intenity are used.}
+
+\item{local_bg}{\code{logical}.
+Whether to further to clean peaks of lists by modelling the local background.
+Default \code{FALSE}.
+See \code{\link[MALDIzooMS:peaks_local_bg]{MALDIzooMS::peaks_local_bg()}}.
+Ideally should work with a \code{snr} threshold of 0L.}
+
+\item{mass_range}{\code{numeric}.
+Mass window to both sides of a peak to be considered for local background modelling
+Default 100.}
+
+\item{bg_cutoff}{\code{numeric}.
+The peaks within the mass range with intensity below the \code{bg_cutoff} quantile
+are considered for background modelling. \code{bg_cutoff=1} keeps all peaks
+and \code{bg_cutoff=0.5} would only keep the bottom half. Default 0.5.}
+
+\item{l_cutoff}{\code{numeric}.
+Likelihood threshold or p-value. Peaks with a probability of being modelled as
+background noise higher than this are filtered out.
+Default 1e-8.}
+
+\item{tolerance}{\code{numeric}.
+Mass tolerance in Da between \code{mono_masses} with subsequent isotopic peaks
+and detected peaks. See \code{\link[MsCoreUtils:matching]{MsCoreUtils::closest()}}
+Default 0.4.}
+
+\item{ppm}{\code{numeric}.
+Parts-per-million added to tolerance. See \code{\link[MsCoreUtils:matching]{MsCoreUtils::closest()}}.
+Default 50.}
+
+\item{n_isopeaks}{\code{integer}.
+Number of isotopic peaks to pick. Default is 5 and the maximum permitted.
+Default 5L.}
+
+\item{min_isopeaks}{\code{integer}.
+If less than min_isopeaks consecutive (about 1 Da difference) isotopic peaks
+are detected, the whole isotopic envelope is discarded.
+Default 4L.}
+
+\item{norm_func}{\code{function} or \code{NULL} (default).
+Function to normalize the isotopic distribution.
+If \code{NULL} (default), the isotopic peaks are normalised to the highest one.}
 }
 \description{
 Preprocess a Spectra object with MsBackendMzR

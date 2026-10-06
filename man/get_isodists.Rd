@@ -7,16 +7,33 @@
 get_isodists(seqs, ndeam, nhyds, norm_func, long_format = F)
 }
 \arguments{
-\item{nhyds}{Integer, vector}
+\item{seqs}{Array or list of peptide sequences}
 
-\item{q2e}{Optional q2e value to calculate the theoretical distribution of
-a peptide with this extent of deamidation}
+\item{ndeam}{Maximum number of deamidated to consider. Usually the maximum number of Q's
+in all sequences overall. It generates deamidated pepitde envelopes for this amount
+of deamidations at most, even if a given peptide has more Q's.}
+
+\item{nhyds}{Integer, vector. Number of hydroxyprolines.}
+
+\item{norm_func}{Function to use for normalizing intensities, usually \code{sum} or \code{max}.}
+
+\item{long_format}{\code{logival}, whether output a list of matrices with the isotopic envelopes
+or a single \code{data.frame} (see Value section)}
 }
 \value{
+If \code{long_format} is \code{TRUE}, it returns a long-format \code{data.frame} with
+the relative intensity of each peptide and isotopic position for the native (non-deamidated),
+and the verisions with 1 or more deamidations.
+If \code{long_format} is \code{FALSE}, it returns a list with the isotopic patters for the native and
+deamidated versions separated in each element of the list.
+
 Array of intensity distributions, without the masses
 }
 \description{
 Wrapper for bacollite ms_iso.
-Calculates theoretical isotopic deistributions for a list of
-sequences
+Calculates theoretical isotopic deistributions for a list of sequences.
+}
+\examples{
+isodists = get_isodists(parchment_peptides$sequence, 3, parchment_peptides$n_hyp, sum, TRUE)
+isotopic_deam_df(isodists, 0.7, sum)
 }

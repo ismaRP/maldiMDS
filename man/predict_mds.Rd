@@ -2,20 +2,23 @@
 % Please edit documentation in R/lme_mds.R
 \name{predict_mds}
 \alias{predict_mds}
-\title{Title}
+\title{Predict MDS for samples}
 \usage{
 predict_mds(model, estimates, new_q2e = NULL, logq = T)
 }
 \arguments{
 \item{model}{lme model object}
 
-\item{estimates}{}
+\item{estimates}{Contains estimates as extracted by \link{extract_estimates}:}
 
 \item{new_q2e}{New q2e data for which MDS is predicted using the trained model
 q is stored in a column called "resp"}
 
 \item{logq}{whether q is in log-scale in q2e or new_q2e}
 }
+\value{
+\code{list} with peptide and sample level MDS predictions.
+}
 \description{
-Title
+Predict MDS for samples
 }

@@ -7,7 +7,9 @@
 print_progress(msg, verbose)
 }
 \arguments{
-\item{verbose}{}
+\item{msg}{Message to print}
+
+\item{verbose}{\code{logical} whether to print the message}
 }
 \description{
 Print only if verbose

@@ -7,15 +7,13 @@
 preprocess_spectra(
   indir = NULL,
   mzml_files = NULL,
-  spectrum_file_name = NULL,
   sps_mzr = NULL,
-  peptides_user = NULL,
+  pep_table = NULL,
   make_plot = FALSE,
   taxon_factor = NULL,
   taxon_column = NULL,
   verbose = FALSE,
   spectrumId_in_file = FALSE,
-  nreplicates = NULL,
   ncores = NULL,
   chunk_size = 40,
   ...
@@ -26,14 +24,10 @@ preprocess_spectra(
 
 \item{mzml_files}{Paths to mzML files}
 
-\item{spectrum_file_name}{If mzml_files are provided, whether to use file names
-as spectra names. Otherwise, it is assumed the the spectra IDs are in the mzML
-files' headers.}
-
 \item{sps_mzr}{Spectra object. Alternatively to passing \code{indir} and/or \code{mzml_files},
 it is possible to pass a Spectra object directly.}
 
-\item{peptides_user}{DataFrame with peptides to be used to calculate glutamine q2e deamidation on.
+\item{pep_table}{DataFrame with peptides to be used to calculate glutamine q2e deamidation on.
 It must contain the following columns:
 * \code{mass} with peptide M+H monoisotopic masses
 * \code{sequence}
@@ -41,27 +35,21 @@ It must contain the following columns:
 * \code{pep_number} a peptide number or ID, which can be the same across taxa. Eg. pep1, pep2, ...
 * \code{pep_name} optional. Additional peptide name, this could be the ZooMS marker name
 * \code{taxon_column} optional. If For markers, taxa that this peptide marker belongs to, if the preprocessing
-is split by taxa.
-The default peptides are the ones from Nair et al. (2022).
-The paper contains the details on the preprocessing procedure.}
+is split by taxa.}
 
-\item{make_plot}{logical, whether to make a plot of the preprocessing step. Default is \code{FALSE}.
-If set to \code{TRUE} the input spectral data cannot contain more than 10 spectra. If you need to
-plot more spectra, call the function multiple times.}
+\item{make_plot}{logical, whether to make a plot of the preprocessing step. Default is \code{FALSE}.}
 
 \item{taxon_factor}{Factor to split spectra by taxon if a different set of peptides is
 to be used for each.}
 
-\item{taxon_column}{Column in \code{peptides_user} with the taxonomic ID used
+\item{taxon_column}{Column in \code{pep_table} with the taxonomic ID used
 for splitting the analysis.}
 
 \item{verbose}{Whether to output progress}
 
-\item{spectrumId_in_file}{logical. If spectra is given as one spectrum per mzML file and spectrumId is
-the file name, instead of being in the ID label of the mzML file. This is discouraged.}
-
-\item{nreplicates}{integer, default NULL. Number of replicates per sample. If set, only samples with
-\code{nreplicates} are analysed}
+\item{spectrumId_in_file}{If mzml_files are provided, whether to use file names
+as spectra names. Otherwise, it is assumed the the spectra IDs are in the mzML
+files' headers.}
 
 \item{ncores}{\code{integer}.
 Number of cores used by the \code{\link[Spectra:MsBackend]{Spectra::MsBackendMzR()}} backend in \code{\link[Spectra:spectraData]{Spectra::peaksData()}}
@@ -73,63 +61,61 @@ Processing chunk size i.e. how many spectra are loaded and processed in a chunk.
 Keep in mind there will be \code{ncores} chunks processed in parallel.
 Default is 40L.}
 
-\item{...}{MALDI-TOF Preprocessing and/or plotting parameters (see below).
-\itemize{
-\item \code{smooth_wma_hws} \code{integer}.
-Half-window size for WeightedMovingAverage smoothing method. Default 4.
-\item \code{smooth_sg_hws} \code{integer}.
-Half-window size for SavitzkyGolay smoothing method. Default 6.
-\item \code{iterations} \code{integer}.
-Iterations parameter for baseline detection using SNIP algorithm (see \code{\link[MsCoreUtils:estimateBaseline]{MsCoreUtils::estimateBaseline()}}). Default 50.
-\item \code{halfWindowSize} \code{integer}.
-Half-window size parameter for local maximum detection. Default 20.
-\item \code{snr} \code{numeric}.
+\item{...}{
+  Arguments passed on to \code{\link[=.preprocess_spectra]{.preprocess_spectra}}
+  \describe{
+    \item{\code{parparam}}{instance of\link[BiocParallel:BiocParallelParam-class]{BiocParallel::BiocParallelParam} options}
+    \item{\code{smooth_wma_hws}}{\code{integer}.
+Half-window size for WeightedMovingAverage smoothing method. Default 4.}
+    \item{\code{smooth_sg_hws}}{\code{integer}.
+Half-window size for SavitzkyGolay smoothing method. Default 6.}
+    \item{\code{iterations}}{\code{integer}.
+Iterations parameter for baseline detection using SNIP algorithm (see \code{\link[MsCoreUtils:estimateBaseline]{MsCoreUtils::estimateBaseline()}}). Default 50.}
+    \item{\code{halfWindowSize}}{\code{integer}.
+Half-window size parameter for local maximum detection. Default 20.}
+    \item{\code{snr}}{\code{numeric}.
 Signal-to-noise threshold above which peaks are considered.
 Only used for the SuperSmoother or MAD noise estimates.
 For local background estimation, see params \code{local_bg}, \code{mass_range} and \code{bg_cutoff} and \code{l_cutoff}.
-Default 2.
-\item \code{k} \code{integer}.
-\code{k} parameter for \code{\link[MsCoreUtils:refineCentroids]{MsCoreUtils::refineCentroids()}} Default is 0L, i.e. do not perform centroid refinement.
-\item \code{threshold} \code{numeric}.
-threshold parameter for \code{\link[MsCoreUtils:refineCentroids]{MsCoreUtils::refineCentroids()}} Default is 0.33, meaning only intensities above 0.33*maximal peak intenity are used.
-\item \code{local_bg} \code{logical}.
+Default 2.}
+    \item{\code{k}}{\code{integer}.
+\code{k} parameter for \code{\link[MsCoreUtils:refineCentroids]{MsCoreUtils::refineCentroids()}} Default is 0L, i.e. do not perform centroid refinement.}
+    \item{\code{threshold}}{\code{numeric}.
+threshold parameter for \code{\link[MsCoreUtils:refineCentroids]{MsCoreUtils::refineCentroids()}} Default is 0.33, meaning only intensities above 0.33*maximal peak intenity are used.}
+    \item{\code{local_bg}}{\code{logical}.
 Whether to further to clean peaks of lists by modelling the local background.
 Default \code{FALSE}.
 See \code{\link[MALDIzooMS:peaks_local_bg]{MALDIzooMS::peaks_local_bg()}}.
-Ideally should work with a \code{snr} threshold of 0L.
-\item \code{mass_range} \code{numeric}.
+Ideally should work with a \code{snr} threshold of 0L.}
+    \item{\code{mass_range}}{\code{numeric}.
 Mass window to both sides of a peak to be considered for local background modelling
-Default 100.
-\item \code{bg_cutoff} \code{numeric}.
+Default 100.}
+    \item{\code{bg_cutoff}}{\code{numeric}.
 The peaks within the mass range with intensity below the \code{bg_cutoff} quantile
 are considered for background modelling. \code{bg_cutoff=1} keeps all peaks
-and \code{bg_cutoff=0.5} would only keep the bottom half. Default 0.5.
-\item \code{l_cutoff} \code{numeric}.
+and \code{bg_cutoff=0.5} would only keep the bottom half. Default 0.5.}
+    \item{\code{l_cutoff}}{\code{numeric}.
 Likelihood threshold or p-value. Peaks with a probability of being modelled as
 background noise higher than this are filtered out.
-Default 1e-8.
-\item \code{tolerance} \code{numeric}.
+Default 1e-8.}
+    \item{\code{tolerance}}{\code{numeric}.
 Mass tolerance in Da between \code{mono_masses} with subsequent isotopic peaks
 and detected peaks. See \code{\link[MsCoreUtils:matching]{MsCoreUtils::closest()}}
-Default 0.4.
-\item \code{ppm} \code{numeric}.
+Default 0.4.}
+    \item{\code{ppm}}{\code{numeric}.
 Parts-per-million added to tolerance. See \code{\link[MsCoreUtils:matching]{MsCoreUtils::closest()}}.
-Default 50.
-\item \code{n_isopeaks} \code{integer}.
+Default 50.}
+    \item{\code{n_isopeaks}}{\code{integer}.
 Number of isotopic peaks to pick. Default is 5 and the maximum permitted.
-Default 5L.
-\item \code{min_isopeaks} \code{integer}.
+Default 5L.}
+    \item{\code{min_isopeaks}}{\code{integer}.
 If less than min_isopeaks consecutive (about 1 Da difference) isotopic peaks
 are detected, the whole isotopic envelope is discarded.
-Default 4L.
-\item \code{norm_func} \code{function} or \code{NULL} (default).
+Default 4L.}
+    \item{\code{norm_func}}{\code{function} or \code{NULL} (default).
 Function to normalize the isotopic distribution.
-If \code{NULL} (default), the isotopic peaks are normalised to the highest one.
-\item \code{q2e} \code{numeric}. Only for plotting.
-A theoretical isotopic invelope with this \code{q2e} is overlaid in the plot in blue.
-\item \code{peptide_labeller} \code{function}. Only for plotting.
-A function used to transform the facet labels. See \code{\link[ggplot2:facet_wrap]{ggplot2::facet_wrap()}} and \code{\link[ggplot2:labeller]{ggplot2::labeller()}}
-}}
+If \code{NULL} (default), the isotopic peaks are normalised to the highest one.}
+  }}
 }
 \value{
 A dataframes. Missing peaks are NAs.
@@ -149,10 +135,20 @@ If data is provided using more than one of the options, the \code{sps_mzr} is us
 
 In order to split spectra by taxa to be analysed with different peptides:
 taxon_factor is a factor specifying the split. The order must match that of the input data.
-Then use taxon_column to specify the column of the \code{peptides_user} that contains the taxon.
+Then use taxon_column to specify the column of the \code{pep_table} that contains the taxon.
+}
+\examples{
+\dontrun{
+sps_mzr = Spectra(file_spectra, backend=MsBackendMzR())
+sps_mzr[['sample_name']] = md$sampleID
+mds_peak = preprocess_spectra(
+  sps_mzr = sps_mzr, pep_table = peptides,
+  taxon_factor = md$ID, taxon_column = 'taxon',
+  tolerance=0.05, ncores=1, chunk_size = 15, verbose = TRUE)
+}
 }
 \references{
-Nair, B. et al. (2022) ‘Parchment Glutamine Index (PQI):
-A novel method to estimate glutamine deamidation levels in parchment collagen obtained from low-quality MALDI-TOF data’,
-bioRxiv. doi:10.1101/2022.03.13.483627.
+Nair B, Palomo IR, Markussen B, Wiuf C, Fiddyment S, Collins MJ (2023)
+Parchment Glutamine Index (PQI): A novel method to estimate glutamine deamidation levels in parchment collagen obtained from low-quality MALDI-TOF data.
+Peer community journal, 3. https://doi.org/10.24072/pcjournal.230
 }

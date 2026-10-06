@@ -7,13 +7,15 @@
 lme_mds(q2e_vals, logq = TRUE, g = NULL, outdir = NULL, return_model = F)
 }
 \arguments{
+\item{q2e_vals}{data.frame with q2e estimations per sample, replicate and peptide}
+
 \item{logq}{Whether q values are log-scaled before entering the LME model}
 
 \item{g}{Reliability power in the error normal distribution from linear mixed effects model}
 
 \item{outdir}{Optional. directory where results tables and plots are saved}
 
-\item{q2e}{data.frame with q2e estimations per sample, replicate and peptide}
+\item{return_model}{\code{logical}. Whether to return the lme model object}
 }
 \value{
 list contaning the following:

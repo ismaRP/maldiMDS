@@ -7,7 +7,7 @@
 prepare_peaks(
   peaks,
   n_isopeaks,
-  peptides_user,
+  pep_table,
   int_column = "intensity",
   norm_func = NULL,
   q2e = NULL
@@ -18,7 +18,7 @@ prepare_peaks(
 
 \item{n_isopeaks}{Number of isotopic peaks}
 
-\item{peptides_user}{A dataframe with peptide information. It must contain at least 3 columns,
+\item{pep_table}{A dataframe with peptide information. It must contain at least 3 columns,
 \code{pep_number} or ID, \code{mass}, \code{sequence} and \code{h_hyp} (# of hydroxyprolines).
 IF NULL, default are used, see details.}
 
