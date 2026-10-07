@@ -140,7 +140,8 @@ get_isodists = function(seqs, ndeam, nhyds, norm_func, long_format=F){
       max_Q = max_Q
     )
     for (d in 0:ndeam) {
-      isotopes = array(0, dim = length(seqs)*n_isopeaks)
+      # iso_peps[[paste0('deam_', d)]] = numeric(nrow(iso_peps))
+      isotopes = numeric(nrow(iso_peps))
       for (i in 1:length(seqs)) {
         nQs = str_count(seqs[i], 'Q')
         if (nQs >= d) {
