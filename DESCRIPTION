@@ -32,7 +32,9 @@ Imports:
     Spectra (>= 1.14.0),
     BiocParallel,
     fs,
-    tidyr
+    tidyr,
+    enviPat,
+    MetaboCoreUtils
 URL: https://github.com/ismaRP/maldiMDS
 BugReports: https://github.com/ismaRP/maldiMDS/issues
 Depends: 

@@ -19,3 +19,8 @@
 #' Parchment Glutamine Index (PQI): A novel method to estimate glutamine deamidation levels in parchment collagen obtained from low-quality MALDI-TOF data.
 #' Peer community journal, 3. https://doi.org/10.24072/pcjournal.230
 "parchment_peptides"
+
+
+
+#' Modifications definitions in the style of [MetaboCoreUtils::adducts()]
+"modifications"

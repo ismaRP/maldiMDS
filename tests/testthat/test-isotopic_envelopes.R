@@ -41,3 +41,55 @@ test_that("deamidated isotopic envelopes are shifted", {
   expect_all_equal(iso_env$deam_2[6:7], 0)
 
 })
+
+test_that("no mods returns formula", {
+  form = peptide_formula('GPPGPPGPP')
+  modform = add_modifications(form, NULL)
+
+  expect_equal(form, modform)
+
+})
+
+test_that("correct simple formula", {
+  form = peptide_formula('GQP')
+  expected_form = 'C12H20N4O5'
+  expect_equal(form, expected_form)
+
+  mods = list(hyd=1, deam=1)
+  modform = add_modifications(form, mods)
+  expected_modform = 'C12H20N3O7'
+  expect_equal(modform, expected_modform)
+
+})
+
+
+test_that("correct peptide formula", {
+  form = peptide_formula('GVQGPPGPAGPR')
+  expected_form = 'C47H76N16O14'
+  expect_equal(form, expected_form)
+
+  mods = list(hyd=1, deam=1)
+  modform = add_modifications(form, mods)
+
+  expected_modform = 'C47H76N15O16'
+  expect_equal(modform, expected_modform)
+})
+
+
+test_that("correct isotopic isotopic substitutions", {
+  iso_variants = get_isotopic_variants('C3H1O1S1', threshold=1e-3)
+
+  agg_iso = get_n_isosubs(iso_variants)
+
+  expect_length(agg_iso, 17)
+  expect_equal(
+    agg_iso,
+    c(0,1,1,1,1,2,2,2,2,2,3,3,3,3,4,4,4)
+  )
+})
+
+
+
+
+
+

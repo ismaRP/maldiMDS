@@ -1,3 +1,144 @@
+
+peptide_formula = function(sequence) {
+
+  aa_formula = list(
+    "A" = c(C=3, H=7,  N=1, O=2, S=0),
+    "R" = c(C=6, H=14, N=4, O=2, S=0),
+    "N" = c(C=4, H=8,  N=2, O=3, S=0),
+    "D" = c(C=4, H=7,  N=1, O=4, S=0),
+    "C" = c(C=3, H=7,  N=1, O=2, S=1),
+    "E" = c(C=5, H=9,  N=1, O=4, S=0),
+    "Q" = c(C=5, H=10, N=2, O=3, S=0),
+    "G" = c(C=2, H=5,  N=1, O=2, S=0),
+    "H" = c(C=6, H=9,  N=3, O=2, S=0),
+    "I" = c(C=6, H=13, N=1, O=2, S=0),
+    "L" = c(C=6, H=13, N=1, O=2, S=0),
+    "K" = c(C=6, H=14, N=2, O=2, S=0),
+    "M" = c(C=5, H=11, N=1, O=2, S=1),
+    "F" = c(C=9, H=11, N=1, O=2, S=0),
+    "P" = c(C=5, H=9,  N=1, O=2, S=0),
+    "S" = c(C=3, H=7,  N=1, O=3, S=0),
+    "T" = c(C=4, H=9,  N=1, O=3, S=0),
+    "W" = c(C=11,H=12, N=2, O=2, S=0),
+    "Y" = c(C=9, H=11, N=1, O=3, S=0),
+    "V" = c(C=5, H=11, N=1, O=2, S=0)
+  )
+
+  aa = strsplit(toupper(sequence), "")[[1]]
+
+  # Sum free amino-acid formulas
+  chemform = Reduce(
+    `+`,
+    lapply(aa, function(x) aa_formula[[x]])
+  )
+
+  # Remove H2O for every peptide bond
+  n_bonds = length(aa) - 1
+
+  chemform["H"] = chemform["H"] - 2 * n_bonds
+  chemform["O"] = chemform["O"] - n_bonds
+
+  # Format in Hill notation
+  chemform = chemform[chemform != 0]
+
+  chemform = chemform[
+    c(
+      intersect(c("C", "H"), names(chemform)),
+      sort(setdiff(names(chemform), c("C", "H")))
+    )
+  ]
+
+  return(
+    paste0(
+      names(chemform),
+      ifelse(chemform == 1, "", chemform),
+      collapse = ""
+      )
+    )
+}
+
+
+add_modifications = function(pepform, mods=NULL) {
+  if (is.null(mods)) return(pepform)
+  for (m in names(mods)) {
+    n = mods[[m]]
+    # Add
+    if (modifications[m,'formula_add'] != '') {
+      pepform = MetaboCoreUtils::addElements(
+        pepform,
+        MetaboCoreUtils::multiplyElements(
+          modifications[m,'formula_add'], n
+        )
+      )
+    }
+    # Subtract
+    if (modifications[m,'formula_sub'] != '') {
+      pepform = MetaboCoreUtils::subtractElements(
+        pepform,
+        MetaboCoreUtils::multiplyElements(
+          modifications[m,'formula_sub'], n
+        )
+      )
+    }
+  }
+  # Finally add [M+H]+ adduct
+  pepform = MetaboCoreUtils::addElements(pepform, 'H')
+
+  return(pepform)
+
+}
+
+
+get_n_isosubs = function(iso_variants) {
+  otherisotopes = c(
+    '13C'=1,
+    '2H'=1,
+    '15N'=1,
+    '18O'=2, '17O'=1,
+    '34S'=2, '33S'=1, '36S'=4)
+  isotopic_pos = apply(
+    iso_variants, 1,
+    function(iv) {
+      sum(iv[names(otherisotopes)] * otherisotopes, na.rm = T)
+    })
+  return(isotopic_pos)
+}
+
+
+get_isotopic_variants = function(pepform, ...) {
+  data("isotopes", package = "enviPat")
+  iso_variants = isopattern(
+    isotopes, pepform, charge = 1, rel_to = 3, verbose=FALSE, ...)
+  iso_variants = iso_variants[[pepform]]
+  return(iso_variants)
+}
+
+isotopic_envelope = function(pepform, ...) {
+  iso_variants = get_isotopic_variants(pepform, ...)
+  n_isosubs = get_n_isosubs(iso_variants)
+  iso_variants = cbind(iso_variants, n_isosubs)
+  colnames(iso_variants)[ncol(iso_variants)] = 'n_isosubs'
+
+  agg_abundance = by(
+    iso_variants[,'abundance'],
+    iso_variants[,'n_isosubs'],
+    sum, simplify = T)
+
+  avg_mass = by(
+    iso_variants[,c('m/z', 'abundance')],
+    iso_variants[,'n_isosubs'],
+    function(x) {
+      wm = weighted.mean(x[,'m/z'], x[,'abundance'])
+    }
+  )
+  iso_env = cbind(
+    mass_pos = unique(n_isosubs),
+    avg_mass,
+    agg_abundance
+  )
+  return(iso_env)
+}
+
 #' Isotopic distribution of deamidated peptides
 #' It produces the isotopic distribution of peptides with a given extent
 #' of deamidation.
