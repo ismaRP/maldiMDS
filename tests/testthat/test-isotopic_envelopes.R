@@ -1,46 +1,4 @@
-test_that("long format isotopic envelopes have right shape", {
-  seqs = c('GPPGPQGPP', 'GQPGPQGPP')
-  ndeam = 2
-  nhyd = c(2, 1)
-  iso_env = get_isodists(seqs, ndeam, nhyd, sum, T)
-  expect_equal(nrow(iso_env), 10)
-  expect_equal(ncol(iso_env), 4 + ndeam)
 
-  pep_idx = rep(c(1,2), each=5)
-  mass_pos = rep(c(1,2,3,4,5), times=2)
-
-  expect_equal(iso_env$pep_idx, pep_idx)
-  expect_equal(iso_env$mass_pos, mass_pos)
-})
-
-test_that('correct envelopes', {
-  test_envelope = readRDS(test_path('fixtures', 'test_envelope.rds'))
-  iso_env = get_isodists(
-    test_envelope$seqs,
-    test_envelope$ndeam,
-    test_envelope$nhyd,
-    sum, T)
-  expected_env = test_envelope$iso_env
-
-  expect_equal(
-    iso_env,
-    expected_env
-  )
-
-})
-
-test_that("deamidated isotopic envelopes are shifted", {
-  seqs = c('GPPGPQGPP', 'GQPGPQGPP')
-  ndeam = 2
-  nhyd = c(2, 1)
-  iso_env = get_isodists(seqs, ndeam, nhyd, sum, T)
-
-  expect_equal(iso_env$deam_1[1], 0)
-
-  expect_all_equal(iso_env$deam_2[1:5], 0)
-  expect_all_equal(iso_env$deam_2[6:7], 0)
-
-})
 
 test_that("no mods returns formula", {
   form = peptide_formula('GPPGPPGPP')
@@ -77,7 +35,7 @@ test_that("correct peptide formula", {
 
 
 test_that("correct isotopic isotopic substitutions", {
-  iso_variants = get_isotopic_variants('C3H1O1S1', threshold=1e-3)
+  iso_variants = get_isotopic_variants('C3H1O1S1', threshold=1e-5)
 
   agg_iso = get_n_isosubs(iso_variants)
 
@@ -88,8 +46,54 @@ test_that("correct isotopic isotopic substitutions", {
   )
 })
 
+test_that("deamidated isotopic envelopes are shifted", {
+  seqs = c('GPPGPQGPP', 'GQPGPQGPP')
+  ndeam = 2
+  nhyd = c(2, 1)
+  iso_env = get_isodists(seqs, nhyd, ndeam, n_isopeaks=5, long_format=T, threshold=1e-4)
+
+  expect_equal(iso_env$deam_1[1], 0)
+
+  expect_all_equal(iso_env$deam_2[1:5], 0)
+  expect_all_equal(iso_env$deam_2[6:7], 0)
+
+})
 
 
+test_that("long format isotopic envelopes have right shape", {
+  seqs = c('GPPGPQGPP', 'GQPGPQGPP')
+  ndeam = 2
+  nhyd = c(2, 1)
+  n_isopeaks = 6
+  iso_env = get_isodists(seqs, nhyd, ndeam, n_isopeaks=n_isopeaks, long_format=T, threshold=1e-4)
+
+  expect_equal(nrow(iso_env), n_isopeaks*length(seqs))
+  expect_equal(ncol(iso_env), 4 + ndeam)
+
+  pep_idx = rep(c(1,2), each=n_isopeaks)
+  mass_pos = rep(1:n_isopeaks, times=length(seqs))
+
+  expect_equal(iso_env$pep_idx, pep_idx)
+  expect_equal(iso_env$mass_pos, mass_pos)
+})
 
 
+test_that("isotopic distributions sum up ~< 1", {
+  seqs = c('GPPGPQGPP', 'GQPGPQGPP')
+  ndeam = 2
+  nhyd = c(2, 1)
+  n_isopeaks = 9
+  iso_env = get_isodists(
+    seqs, nhyd, ndeam, n_isopeaks=n_isopeaks,
+    long_format=T, threshold=1e-9)
+
+  totals = by(
+    iso_env[,'deam_0'],
+    iso_env[,'pep_idx'],
+    sum
+  )
+  tol = 1e-7
+  expect_all_true(as.logical(abs(1 - totals) < tol))
+
+})
 

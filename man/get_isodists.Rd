@@ -4,21 +4,30 @@
 \alias{get_isodists}
 \title{Get isotopic distributions}
 \usage{
-get_isodists(seqs, ndeam, nhyds, norm_func, long_format = F)
+get_isodists(
+  seqs,
+  nhyds,
+  ndeam,
+  n_isopeaks = 5,
+  long_format = F,
+  threshold = 1e-04
+)
 }
 \arguments{
 \item{seqs}{Array or list of peptide sequences}
+
+\item{nhyds}{Integer, vector. Number of hydroxyprolines.}
 
 \item{ndeam}{Maximum number of deamidated to consider. Usually the maximum number of Q's
 in all sequences overall. It generates deamidated pepitde envelopes for this amount
 of deamidations at most, even if a given peptide has more Q's.}
 
-\item{nhyds}{Integer, vector. Number of hydroxyprolines.}
-
-\item{norm_func}{Function to use for normalizing intensities, usually \code{sum} or \code{max}.}
+\item{n_isopeaks}{Number of isotopic peaks to generate}
 
 \item{long_format}{\code{logival}, whether output a list of matrices with the isotopic envelopes
 or a single \code{data.frame} (see Value section)}
+
+\item{threshold}{See \code{\link[enviPat:isopattern]{enviPat::isopattern()}}.}
 }
 \value{
 If \code{long_format} is \code{TRUE}, it returns a long-format \code{data.frame} with
@@ -26,11 +35,11 @@ the relative intensity of each peptide and isotopic position for the native (non
 and the verisions with 1 or more deamidations.
 If \code{long_format} is \code{FALSE}, it returns a list with the isotopic patters for the native and
 deamidated versions separated in each element of the list.
+Either way, it returns probabilities as intensities.
 
 Array of intensity distributions, without the masses
 }
 \description{
-Wrapper for bacollite ms_iso.
 Calculates theoretical isotopic deistributions for a list of sequences.
 }
 \examples{

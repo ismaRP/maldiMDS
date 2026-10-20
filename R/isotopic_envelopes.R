@@ -1,4 +1,13 @@
 
+#' Calculates the chemical formula of a peptide sequence
+#'
+#' @param sequence `character`, peptide sequence
+#'
+#' @returns `character` with the formula using the Hill notation
+#' @export
+#'
+#' @examples
+#' peptide_formula(GVQGPPGPAGPR)
 peptide_formula = function(sequence) {
 
   aa_formula = list(
@@ -58,10 +67,25 @@ peptide_formula = function(sequence) {
 }
 
 
+#' Add modifications to a chemical formula, adding and substracting atoms
+#'
+#' @param pepform `character` initial chemical formula.
+#' @param mods List of modifications to add to the peptide, with the number of
+#' modifications, e.g. `list('deam'=1, 'hyd'=2)`
+#'
+#' @returns A `character` with the chemical formula in Hill notation of the
+#' peptide with the modifications added
+#' @export
+#'
+#' @examples
+#' pepform = peptide_formula(GVQGPPGPAGPR)
+#' modform = add_modifications(pepform, mods=list('deam'=1, 'hyd'=1))
 add_modifications = function(pepform, mods=NULL) {
   if (is.null(mods)) return(pepform)
   for (m in names(mods)) {
     n = mods[[m]]
+    if (n == 0) next
+    if (!is.wholenumber(n)) stop('Non-integer number of modifications')
     # Add
     if (modifications[m,'formula_add'] != '') {
       pepform = MetaboCoreUtils::addElements(
@@ -89,6 +113,13 @@ add_modifications = function(pepform, mods=NULL) {
 }
 
 
+#' Calculate number of isotopic substitutions / neutron additions
+#'
+#' @param iso_variants As retuened by [get_isotopic_variants]
+#'
+#' @returns An array with the number of netroon additions or isotopic substitutions
+#' @export
+#'
 get_n_isosubs = function(iso_variants) {
   otherisotopes = c(
     '13C'=1,
@@ -105,16 +136,57 @@ get_n_isosubs = function(iso_variants) {
 }
 
 
-get_isotopic_variants = function(pepform, ...) {
-  data("isotopes", package = "enviPat")
-  iso_variants = isopattern(
-    isotopes, pepform, charge = 1, rel_to = 3, verbose=FALSE, ...)
+#' Wrapper around [enviPat::isopattern()]
+#'
+#' It is predefined to return probabilities and use `charge` 1.
+#' @inheritParams enviPat::isopattern
+#' @param pepform A single peptide checmical formula
+#' @returns The same matrix as [enviPat::isopattern()]
+#' @export
+#'
+#' @examples
+#' pepform = peptide_formula(GVQGPPGPAGPR)
+#' modform = add_modifications(pepform, mods=list('deam'=1, 'hyd'=1))
+#' get_isotopic_variants(modform)
+get_isotopic_variants = function(pepform, threshold=1e-4, isotopes=NULL) {
+  if (is.null(isotopes)) data("isotopes", package = "enviPat")
+  iso_variants = enviPat::isopattern(
+    isotopes, pepform, charge = 1, verbose=FALSE, rel_to = 2, threshold=threshold)
   iso_variants = iso_variants[[pepform]]
   return(iso_variants)
 }
 
-isotopic_envelope = function(pepform, ...) {
-  iso_variants = get_isotopic_variants(pepform, ...)
+#' Calculate the theoretical isotopic envelope
+#'
+#' @param n_isopeaks Number of isotopic peaks to calculate
+#' @param threshold Probability threshold of the isotopic variants
+#' @inheritParams peptide_formula
+#' @inheritParams add_modifications
+#' @returns A `matrix` with 3 columns: number of isotopic substitutions,
+#' mass and probability. It has `n_isopeaks` columns.
+#' @details
+#' First it calculates all isotopic variants separately as [enviPat::isopattern()]
+#' does. Then it calculates how many isotopic substitutions or neutrons are added
+#' to each variant and aggregates isotopic variants with equivalent substitutions.
+#' Only variants above the `threshold` are used. Decrease if needed to allow for
+#' more `n_isopeaks`
+#' @export
+#'
+#' @examples
+#' iso_env = isotopic_envelope(
+#'   'GPPGPQGPP', mods=list('deam'=1, 'hyd'=1), n_isopeaks = 6)
+#'
+isotopic_envelope = function(
+    sequence,
+    mods=NULL,
+    n_isopeaks=5,
+    threshold=1e-4
+) {
+  pepform = peptide_formula(sequence)
+  pepform = add_modifications(pepform, mods)
+
+
+  iso_variants = get_isotopic_variants(pepform, threshold=threshold)
   n_isosubs = get_n_isosubs(iso_variants)
   iso_variants = cbind(iso_variants, n_isosubs)
   colnames(iso_variants)[ncol(iso_variants)] = 'n_isosubs'
@@ -131,10 +203,15 @@ isotopic_envelope = function(pepform, ...) {
       wm = weighted.mean(x[,'m/z'], x[,'abundance'])
     }
   )
+
+  if (length(avg_mass) < n_isopeaks) {
+    stop('Not enough isotopic peaks, decrease threshold')
+  }
+
   iso_env = cbind(
-    mass_pos = unique(n_isosubs),
-    avg_mass,
-    agg_abundance
+    iso_subs = unique(n_isosubs)[1:n_isopeaks],
+    mass = avg_mass[1:n_isopeaks],
+    prob = agg_abundance[1:n_isopeaks]
   )
   return(iso_env)
 }
@@ -229,21 +306,22 @@ isotopic_deam = function(q2e=0.5, norm_func, max_Q, ...) {
 
 #' Get isotopic distributions
 #' @description
-#' Wrapper for bacollite ms_iso.
 #' Calculates theoretical isotopic deistributions for a list of sequences.
 #' @param seqs Array or list of peptide sequences
+#' @param nhyds Integer, vector. Number of hydroxyprolines.
 #' @param ndeam Maximum number of deamidated to consider. Usually the maximum number of Q's
 #' in all sequences overall. It generates deamidated pepitde envelopes for this amount
 #' of deamidations at most, even if a given peptide has more Q's.
-#' @param nhyds Integer, vector. Number of hydroxyprolines.
-#' @param norm_func Function to use for normalizing intensities, usually `sum` or `max`.
+#' @param n_isopeaks Number of isotopic peaks to generate
 #' @param long_format `logival`, whether output a list of matrices with the isotopic envelopes
 #' or a single `data.frame` (see Value section)
+#' @param threshold See [enviPat::isopattern()].
 #' @return If `long_format` is `TRUE`, it returns a long-format `data.frame` with
 #' the relative intensity of each peptide and isotopic position for the native (non-deamidated),
 #' and the verisions with 1 or more deamidations.
 #' If `long_format` is `FALSE`, it returns a list with the isotopic patters for the native and
 #' deamidated versions separated in each element of the list.
+#' Either way, it returns probabilities as intensities.
 #'
 #' Array of intensity distributions, without the masses
 #' @export
@@ -253,8 +331,7 @@ isotopic_deam = function(q2e=0.5, norm_func, max_Q, ...) {
 #' @examples
 #' isodists = get_isodists(parchment_peptides$sequence, 3, parchment_peptides$n_hyp, sum, TRUE)
 #' isotopic_deam_df(isodists, 0.7, sum)
-get_isodists = function(seqs, ndeam, nhyds, norm_func, long_format=F){
-  n_isopeaks = 5
+get_isodists = function(seqs, nhyds, ndeam, n_isopeaks=5, long_format=F, threshold=1e-4){
   if (!long_format) {
     iso_peps = list()
     for (d in 0:ndeam) {
@@ -262,12 +339,10 @@ get_isodists = function(seqs, ndeam, nhyds, norm_func, long_format=F){
       for (i in 1:length(seqs)) {
         nQs = str_count(seqs[i], 'Q')
         if (nQs >= d) {
-          isodist = ms_iso(seqs[i], ndeamidations = d, nhydroxylations = nhyds[i])
-          isodist[,2] = isodist[,2] / norm_func(isodist[,2])
-          isotopes[i, (d + 1):n_isopeaks] = isodist[1:(n_isopeaks - d), 2]
-        } # else {
-        # isotopes[i,] = NaN
-        # }
+          mods = list('deam' = d, 'hyd' = nhyds[i])
+          isodist = isotopic_envelope(seqs[i], mods=mods, n_isopeaks=n_isopeaks, threshold = threshold)
+          isotopes[i, (d + 1):n_isopeaks] = isodist[1:(n_isopeaks - d), 3]
+        }
       }
       iso_peps[[paste0('deam_',d)]] = isotopes
     }
@@ -281,17 +356,14 @@ get_isodists = function(seqs, ndeam, nhyds, norm_func, long_format=F){
       max_Q = max_Q
     )
     for (d in 0:ndeam) {
-      # iso_peps[[paste0('deam_', d)]] = numeric(nrow(iso_peps))
       isotopes = numeric(nrow(iso_peps))
       for (i in 1:length(seqs)) {
         nQs = str_count(seqs[i], 'Q')
         if (nQs >= d) {
-          isodist = ms_iso(seqs[i], ndeamidations = d, nhydroxylations = nhyds[i])
-          isodist[,2] = isodist[,2] / norm_func(isodist[,2])
-          isotopes[((i - 1)*5 + 1 + d):(i*5)] = isodist[1:(n_isopeaks - d),2]
-        } # else {
-        # isotopes[((i-1)*5+1):(i*5)] = NaN
-        # }
+          mods = list('deam' = d, 'hyd' = nhyds[i])
+          isodist = isotopic_envelope(seqs[i], mods=mods, n_isopeaks=n_isopeaks, threshold = threshold)
+          isotopes[((i - 1)*n_isopeaks + 1 + d):(i*n_isopeaks)] = isodist[1:(n_isopeaks - d), 3]
+        }
       }
       iso_peps[[paste0('deam_', d)]] = isotopes
     }

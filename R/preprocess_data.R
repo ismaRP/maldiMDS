@@ -647,7 +647,7 @@ prepare_peaks = function(peaks, n_isopeaks, pep_table, int_column='intensity',
   #   rename(spectra_name = group_name)
 
   iso_peps = get_isodists(
-    pep_table$sequence, 2, pep_table$n_hyp,
+    pep_table$sequence, pep_table$n_hyp, 2,
     norm_func=norm_func, long_format = T)
 
   if (!is.null(q2e)) {
