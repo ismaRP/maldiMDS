@@ -148,7 +148,7 @@ get_n_isosubs = function(iso_variants) {
 #' pepform = peptide_formula(GVQGPPGPAGPR)
 #' modform = add_modifications(pepform, mods=list('deam'=1, 'hyd'=1))
 #' get_isotopic_variants(modform)
-get_isotopic_variants = function(pepform, threshold=1e-4, isotopes=NULL) {
+get_isotopic_variants = function(pepform, threshold=1e-4) {
   if (is.null(isotopes)) data("isotopes", package = "enviPat")
   iso_variants = enviPat::isopattern(
     isotopes, pepform, charge = 1, verbose=FALSE, rel_to = 2, threshold=threshold)

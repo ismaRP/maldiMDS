@@ -642,13 +642,12 @@ prepare_peaks = function(peaks, n_isopeaks, pep_table, int_column='intensity',
                          norm_func=NULL, q2e=NULL) {
 
 
-  if (is.null(norm_func)) norm_func = max
+  if (is.null(norm_func)) norm_func = sum
   # peaks = as.data.frame(peaks) %>%
   #   rename(spectra_name = group_name)
 
   iso_peps = get_isodists(
-    pep_table$sequence, pep_table$n_hyp, 2,
-    norm_func=norm_func, long_format = T)
+    pep_table$sequence, pep_table$n_hyp, 2, long_format = T)
 
   if (!is.null(q2e)) {
     deam_iso = isotopic_deam_df(iso_peps, q2e, norm_func=norm_func)
