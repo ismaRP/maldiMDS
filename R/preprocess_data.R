@@ -134,6 +134,7 @@ preprocess_spectra = function(
       # Remove extension and use filename as spectrumId
       spectrum_id = path_ext_remove(path_file(sps_mzr$dataOrigin))
       sps_mzr$spectrumId = spectrum_id
+
     }
   }
 
@@ -379,26 +380,27 @@ preprocess_spectra = function(
   peaks = peaksData(sps_mzr, BPPARAM=parparam)
 
   print_progress('Done\n', verbose)
-  md = data.frame(
-    spectrumId = sps_mzr[['spectrumId']],
-    sample_name = sps_mzr[['sample_name']]
-  )
+
+  if (!'file' %in% spectraVariables(sps_mzr)) {
+    sps_mzr$file = sps_mzr[['dataStorage']]
+  }
 
   peaks = do.call(
     rbind,
     Map(
-      function(df, sn){
+      function(df, sid, f, sn){
         df = as.data.frame(df)
-        df$spectrumId = sn
+        df$spectrumId = sid
+        df$file = f
+        df$sample_name = sn
         df
       },
       peaks,
-      sps_mzr$spectrumId
+      sps_mzr$spectrumId,
+      sps_mzr$file,
+      sps_mzr$sample_name
     )
   )
-
-  peaks = merge(peaks, md, by='spectrumId', all.x=TRUE, sort=FALSE)
-
   print_progress('\tPreparing peaks ...\n', verbose)
   int_col = 'intensity_SavitzkyGolay'
   peaks = prepare_peaks(
@@ -655,14 +657,12 @@ prepare_peaks = function(peaks, n_isopeaks, pep_table, int_column='intensity',
       mutate(theor_deam = deam_iso$deam_comb)
   }
 
-  n_spectra = length(unique(peaks$spectrumId))
+
+  n_spectra = nrow(unique(peaks[c('file','spectrumId')]))
   n_peptides = nrow(pep_table)
   eps = 1e-5
   peaks = peaks %>%
     mutate(
-      mass_pos = as.factor(rep(
-        seq(n_isopeaks),
-        times = n_spectra * n_peptides)),
       pep_idx = as.factor(rep(
         rep(seq(n_peptides), each = n_isopeaks),
         times = n_spectra)),
@@ -672,8 +672,11 @@ prepare_peaks = function(peaks, n_isopeaks, pep_table, int_column='intensity',
       ndeam = rep(
         rep(str_count(pep_table$sequence, 'Q'), each = n_isopeaks),
         times = n_spectra),
-      weight = SNR/sqrt(pmax(abs(delta_mass), eps))
-      )
+      weight = SNR/sqrt(pmax(abs(delta_mass), eps)),
+      mass_pos = as.factor(rep(
+        seq(n_isopeaks),
+        times = n_spectra * n_peptides)),
+    )
 
 
 
@@ -691,7 +694,7 @@ prepare_peaks = function(peaks, n_isopeaks, pep_table, int_column='intensity',
   peaks[['intensity_use']] = peaks[[int_column]]
   peaks = peaks %>%
     arrange(sample_name, pep_idx, mass_pos) %>%
-    group_by(spectrumId, pep_idx) %>%
+    group_by(sample_name, spectrumId, pep_idx) %>%
     mutate(norm_int = normalize_intensity(intensity_use, norm_func=norm_func),
            n_peaks = sum(!is.na(intensity_use))) %>%
     ungroup() %>%

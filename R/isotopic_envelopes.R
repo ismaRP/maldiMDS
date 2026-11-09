@@ -149,7 +149,6 @@ get_n_isosubs = function(iso_variants) {
 #' modform = add_modifications(pepform, mods=list('deam'=1, 'hyd'=1))
 #' get_isotopic_variants(modform)
 get_isotopic_variants = function(pepform, threshold=1e-4) {
-  if (is.null(isotopes)) data("isotopes", package = "enviPat")
   iso_variants = enviPat::isopattern(
     isotopes, pepform, charge = 1, verbose=FALSE, rel_to = 2, threshold=threshold)
   iso_variants = iso_variants[[pepform]]
@@ -332,6 +331,7 @@ isotopic_deam = function(q2e=0.5, norm_func, max_Q, ...) {
 #' isodists = get_isodists(parchment_peptides$sequence, 3, parchment_peptides$n_hyp, sum, TRUE)
 #' isotopic_deam_df(isodists, 0.7, sum)
 get_isodists = function(seqs, nhyds, ndeam, n_isopeaks=5, long_format=F, threshold=1e-4){
+  data("isotopes", package = "enviPat")
   if (!long_format) {
     iso_peps = list()
     for (d in 0:ndeam) {
