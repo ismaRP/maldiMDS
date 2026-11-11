@@ -1,36 +1,3 @@
-# @param indir Folder containing spectra in mzML format.
-# @param mzml_files Paths to mzML files
-# @param spectrum_file_name If mzml_files are provided, whether to use file names
-# as spectra names. Otherwise, it is assumed the the spectra IDs are in the mzML
-# files' headers.
-# @param sps_mzr Spectra object. Alternatively to passing `indir` and/or `mzml_files`,
-# it is possible to pass a Spectra object directly.
-# @param pep_table DataFrame with peptides to be used to calculate glutamine q2e deamidation on.
-#        It must contain the following columns:
-#        * `mass` with peptide M+H monoisotopic masses
-#        * `sequence`
-#        * `n_hyp` number of hydroxyprolines
-#        * `pep_number` a peptide number or ID, which can be the same across taxa. Eg. pep1, pep2, ...
-#        * `pep_name` optional. Additional peptide name, this could be the ZooMS marker name
-#        * `taxon_column` optional. If For markers, taxa that this peptide marker belongs to, if the preprocessing
-#                         is split by taxa.
-# The default peptides are the ones from Nair et al. (2022).
-# The paper contains the details on the preprocessing procedure.
-# @param make_plot logical, whether to make a plot of the preprocessing step. Default is `FALSE`.
-#        If set to `TRUE` the input spectral data cannot contain more than 10 spectra. If you need to
-#        plot more spectra, call the function multiple times.
-# @param verbose Whether to output progress
-# @param spectrumId_in_file logical. If spectra is given as one spectrum per mzML file and spectrumId is
-#        the file name, instead of being in the ID label of the mzML file. This is discouraged.
-# @param ncores `integer`.
-# Number of cores used by the [Spectra::MsBackendMzR()] backend in [Spectra::peaksData()]
-# Default is `NULL`, in which case it uses `detectCores() - 2` with [BiocParallel::MulticoreParam()].
-# If set to 1, it uses [BiocParallel::SerialParam()].
-# @param chunk_size `integer`.
-# Processing chunk size i.e. how many spectra are loaded and processed in a chunk.
-# Keep in mind there will be \code{ncores} chunks processed in parallel.
-# Default is 40L.
-
 
 
 
